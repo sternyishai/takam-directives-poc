@@ -100,24 +100,19 @@ body {
   margin: 0;
 }
 
-/* The green "in force" badge, shown in the dropdown. */
-.in-force-badge {
+/* The In-force badge: green "in force" (dropdown only) or red "not in force". */
+.badge {
   margin-inline-start: 0.5rem;
   padding: 0 0.4rem;
   border-radius: 4px;
-  background: #1b5e20;
   color: #fff;
   font-weight: bold;
 }
-
-/* The red "not in force" badge on an Expired Directive. */
+.in-force-badge {
+  background: #1b5e20;
+}
 .expired-badge {
-  margin-inline-start: 0.5rem;
-  padding: 0 0.4rem;
-  border-radius: 4px;
   background: #b00020;
-  color: #fff;
-  font-weight: bold;
 }
 
 .store-status {

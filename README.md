@@ -147,7 +147,9 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
   - The selected entry is an index (`-1` for none) kept in state. Enter on a selected entry calls `navigate` and `preventDefault`, so the form is not submitted. With nothing selected, Enter is left to the form.
   - It does not close when the box loses focus. Closing on blur hides the entry before a click on it lands (blur comes first), and the plan leaves full dropdown accessibility out of scope.
   - If the dropdown's request fails, it stays empty: it is only a shortcut, and the full results report the error.
-- **The results list changes only when a search is submitted.** Typing in the box doesn't search. Ticking the filter re-runs the last submitted query, not the text now in the box.
+  - The matches are kept with the query they are for, and shown only while that query is still in the box. Without that, the previous text's matches would stay on screen until the new ones arrive, and ArrowDown + Enter could open a Directive that doesn't match what is typed.
+  - The cost: every pause in typing is a search, so the dropdown's requests are in `search_log` too, with partial words such as "נסיע". They can be told apart only by their timing.
+- **The results list changes only when a search is submitted.** Typing in the box only updates the dropdown, not the list. Ticking the filter re-runs the last submitted query, not the text now in the box.
 - **On the real data, "רכב" now finds H.13.4.1 ("ברכב פרטי") first.** Before prefixes were stripped it found nothing: the only Directive with the word on its own (HOD.13.4.1.2) is not in force until 2027. The trap H.1.1.1 comes second, below the title match.
 - **Vitest runs once, not in watch mode** (`testMode: "run"` in `nx.json`), so `npm test` finishes.
 

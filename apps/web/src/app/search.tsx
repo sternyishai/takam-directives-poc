@@ -1,9 +1,4 @@
-import {
-  useEffect,
-  useState,
-  type FormEvent,
-  type KeyboardEvent,
-} from 'react';
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import type { SearchResult } from '@takam/shared';
 import { TYPE_LABELS } from './labels';
@@ -33,6 +28,8 @@ function viewerPath(result: SearchResult): string {
 
 /** How long typing must pause before the dropdown searches, in ms. */
 const QUICK_SEARCH_DELAY = 150;
+/** How many matches the dropdown shows. */
+const QUICK_RESULTS_LIMIT = 3;
 
 /** The search box, the quick-search dropdown, the in-force filter and the ranked results. */
 export function Search() {
@@ -43,15 +40,19 @@ export function Search() {
   // Off by default: only In-force Directives are shown.
   const [includeExpired, setIncludeExpired] = useState(false);
   const [state, setState] = useState<ResultsState>({ status: 'idle' });
-  // The dropdown's top 3 matches for what is in the box now.
-  const [quickResults, setQuickResults] = useState<SearchResult[]>([]);
+  // The dropdown's top matches, and the query they are for. Keeping the query
+  // lets the dropdown hide matches for older text while new ones load.
+  const [quick, setQuick] = useState<{
+    query: string;
+    results: SearchResult[];
+  }>({ query: '', results: [] });
   // Which dropdown entry the arrow keys have selected: -1 means none.
-  const [selected, setSelected] = useState(-1);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   // Typing opens the dropdown; Escape and submitting close it.
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const navigate = useNavigate();
-  const dropdownShown =
-    dropdownOpen && text.trim() !== '' && quickResults.length > 0;
+  const quickResults = quick.query === text.trim() ? quick.results : [];
+  const dropdownShown = dropdownOpen && quickResults.length > 0;
 
   // Runs on every keystroke, but only searches once typing has paused for
   // QUICK_SEARCH_DELAY: each keystroke's cleanup cancels the previous timer.
@@ -64,7 +65,7 @@ export function Search() {
       const params = new URLSearchParams({
         q: query,
         inForce: String(!includeExpired),
-        limit: '3',
+        limit: String(QUICK_RESULTS_LIMIT),
       });
       fetch(`/api/search?${params}`)
         .then((response) => {
@@ -73,13 +74,13 @@ export function Search() {
         })
         .then((results) => {
           if (!ignore) {
-            setQuickResults(results);
-            setSelected(-1); // new entries: nothing selected yet
+            setQuick({ query, results });
+            setSelectedIndex(-1); // new entries: nothing selected yet
           }
         })
         // The dropdown is only a shortcut: if it fails, it just stays empty.
         .catch(() => {
-          if (!ignore) setQuickResults([]);
+          if (!ignore) setQuick({ query, results: [] });
         });
     }, QUICK_SEARCH_DELAY);
 
@@ -128,17 +129,17 @@ export function Search() {
     if (!dropdownShown) return;
     if (event.key === 'ArrowDown') {
       event.preventDefault(); // don't move the cursor in the box
-      setSelected(Math.min(selected + 1, quickResults.length - 1));
+      setSelectedIndex(Math.min(selectedIndex + 1, quickResults.length - 1));
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
-      setSelected(Math.max(selected - 1, -1));
-    } else if (event.key === 'Enter' && selected !== -1) {
+      setSelectedIndex(Math.max(selectedIndex - 1, -1));
+    } else if (event.key === 'Enter' && selectedIndex !== -1) {
       event.preventDefault(); // don't submit the form
-      navigate(viewerPath(quickResults[selected]));
+      navigate(viewerPath(quickResults[selectedIndex]));
     } else if (event.key === 'Escape') {
       event.preventDefault(); // the browser would also empty the box
       setDropdownOpen(false);
-      setSelected(-1);
+      setSelectedIndex(-1);
     }
   }
 
@@ -161,12 +162,15 @@ export function Search() {
             onChange={(event) => {
               setText(event.target.value);
               setDropdownOpen(true);
-              setSelected(-1);
+              setSelectedIndex(-1);
             }}
             onKeyDown={onKeyDown}
           />
           {dropdownShown && (
-            <QuickResults results={quickResults} selected={selected} />
+            <QuickResults
+              results={quickResults}
+              selectedIndex={selectedIndex}
+            />
           )}
         </div>
         <button type="submit">חיפוש</button>
@@ -189,22 +193,25 @@ export function Search() {
   );
 }
 
-/** The dropdown under the search box: code, title and validity badge. */
+/** The dropdown under the search box: code, title and In-force badge. */
 function QuickResults({
   results,
-  selected,
+  selectedIndex,
 }: {
   results: SearchResult[];
-  selected: number;
+  selectedIndex: number;
 }) {
+  // aria-label: "quick results"
   return (
     <ul className="quick-results" aria-label="תוצאות מהירות">
       {results.map((result, index) => (
-        <li key={result.code} className={index === selected ? 'selected' : ''}>
+        <li
+          key={result.code}
+          className={index === selectedIndex ? 'selected' : ''}
+        >
           <Link to={viewerPath(result)}>
-            <span className="directive-code">{result.code}</span>{' '}
-            {result.title}
-            <ValidityBadge inForce={result.inForce} />
+            <span className="directive-code">{result.code}</span> {result.title}
+            <InForceBadge inForce={result.inForce} />
           </Link>
         </li>
       ))}
@@ -212,12 +219,12 @@ function QuickResults({
   );
 }
 
-/** Green "in force" or red "not in force". */
-function ValidityBadge({ inForce }: { inForce: boolean }) {
+/** Green "בתוקף" (in force) or red "לא בתוקף" (not in force). */
+function InForceBadge({ inForce }: { inForce: boolean }) {
   return inForce ? (
-    <span className="in-force-badge">בתוקף</span>
+    <span className="badge in-force-badge">בתוקף</span>
   ) : (
-    <span className="expired-badge">לא בתוקף</span>
+    <span className="badge expired-badge">לא בתוקף</span>
   );
 }
 
@@ -249,12 +256,11 @@ function ResultList({
           <p className="result-meta">
             <span>{chapterNumbers(result)}</span> ·{' '}
             <span>{TYPE_LABELS[result.type]}</span>
-            {!result.inForce && <span className="expired-badge">לא בתוקף</span>}
+            {/* Only the red badge here: a list of green ones would be noise. */}
+            {!result.inForce && <InForceBadge inForce={false} />}
           </p>
           <h2 className="result-title">
-            <Link to={viewerPath(result)}>
-              {result.title}
-            </Link>
+            <Link to={viewerPath(result)}>{result.title}</Link>
           </h2>
           <p className="result-snippet">{result.snippet}</p>
         </li>

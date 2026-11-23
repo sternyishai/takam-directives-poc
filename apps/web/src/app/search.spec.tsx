@@ -103,9 +103,14 @@ function typeInBox(text: string) {
   fireEvent.change(screen.getByRole('searchbox'), { target: { value: text } });
 }
 
-/** The dropdown under the box, once it has appeared. */
+/** The dropdown under the box ("quick results"), once it has appeared. */
 function findDropdown() {
   return screen.findByRole('list', { name: 'תוצאות מהירות' });
+}
+
+/** The dropdown if it is showing now, or null. */
+function queryDropdown() {
+  return screen.queryByRole('list', { name: 'תוצאות מהירות' });
 }
 
 describe('Search on the home page', () => {
@@ -192,7 +197,7 @@ describe('The quick-search dropdown', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows the top 3 matches with code, title and validity badge, shortly after typing stops', async () => {
+  it('shows the top 3 matches with code, title and In-force badge, shortly after typing stops', async () => {
     stubApi([carInsurance, travelAbroad, travelCosts, expiredInsurance]);
     openHome();
 
@@ -242,6 +247,18 @@ describe('The quick-search dropdown', () => {
     expect(searchCalls()).toEqual([]); // Enter opened the entry, not the full results
   });
 
+  it('hides the matches for the old text as soon as the text changes', async () => {
+    stubApi([carInsurance, travelAbroad]);
+    openHome();
+    typeInBox('נסיעות');
+    await findDropdown();
+
+    typeInBox('רכב');
+
+    expect(queryDropdown()).toBeNull(); // until the matches for "רכב" arrive
+    expect(await findDropdown()).toBeTruthy();
+  });
+
   it('closes on Escape, and opens again when the user types', async () => {
     stubApi([carInsurance, travelAbroad]);
     openHome();
@@ -249,7 +266,7 @@ describe('The quick-search dropdown', () => {
     await findDropdown();
 
     fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Escape' });
-    expect(screen.queryByRole('list', { name: 'תוצאות מהירות' })).toBeNull();
+    expect(queryDropdown()).toBeNull();
 
     typeInBox('נסיעות בתפקיד');
     expect(await findDropdown()).toBeTruthy();
@@ -265,6 +282,6 @@ describe('The quick-search dropdown', () => {
 
     const list = await screen.findByRole('list', { name: 'תוצאות החיפוש' });
     expect(within(list).getAllByRole('listitem')).toHaveLength(3); // the In-force ones
-    expect(screen.queryByRole('list', { name: 'תוצאות מהירות' })).toBeNull();
+    expect(queryDropdown()).toBeNull();
   });
 });
