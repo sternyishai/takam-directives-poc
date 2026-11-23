@@ -88,15 +88,28 @@ export function Search() {
 
       {state.status === 'loading' && <p>מחפש…</p>}
       {state.status === 'failed' && <p>השרת אינו זמין</p>}
-      {state.status === 'loaded' && <ResultList results={state.results} />}
+      {state.status === 'loaded' && (
+        <ResultList results={state.results} includeExpired={includeExpired} />
+      )}
     </section>
   );
 }
 
-/** The results, best match first, or a hint when there are none. */
-function ResultList({ results }: { results: SearchResult[] }) {
+/**
+ * The results, best match first, or a hint when there are none. The hint
+ * suggests ticking the filter only when it is not ticked already.
+ */
+function ResultList({
+  results,
+  includeExpired,
+}: {
+  results: SearchResult[];
+  includeExpired: boolean;
+}) {
   if (results.length === 0) {
-    return (
+    return includeExpired ? (
+      <p>לא נמצאו הוראות. כדאי לבדוק את האיות.</p>
+    ) : (
       <p>
         לא נמצאו הוראות. כדאי לבדוק את האיות, או לסמן "הצג גם הוראות שאינן
         בתוקף".
