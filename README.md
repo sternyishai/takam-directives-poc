@@ -83,7 +83,7 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
 | `apps/web` | React + Vite, Hebrew and right-to-left (`<html lang="he" dir="rtl">`) |
 | `apps/api` | NestJS: `GET /api/health`, `GET /api/search` and `GET /api/directives/:code` |
 | `apps/ingest` | Node CLI that fills the store: Takam site client, security gate, Mammoth conversion |
-| `libs/search` | `DirectiveSearch`: MiniSearch over the title, Document code and headings; Hebrew normalization comes in issue #7 |
+| `libs/search` | `DirectiveSearch`: MiniSearch over the title, Document code and headings, with Hebrew normalization and typo tolerance |
 | `libs/llm` | LangChain models, enrichment, chat (milestone 6) |
 | `libs/shared` | types shared by the API and the web app (`HealthReport`, `Directive`, `SearchResult`), plus `isInForce`, `todayInIsrael` and `officialPageUrl` |
 | `libs/store` | the SQLite schema and the `Store` class: ingest writes to it, the API reads from it |
@@ -123,7 +123,15 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
 - **The API sends `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` on every response**, errors included. The API only sends JSON, so it may load nothing, and no site may frame it. The header is set in `configureApp` (`apps/api/src/app/configure-app.ts`), which `main.ts` and the e2e tests share, so the tests run the same setup as the real server. The page's own CSP belongs to whatever serves the built web app (see the production HLD).
 - **The official link is `https://takam.mof.gov.il/document/{code}`.** This is the site's own Angular route, `document/:id`, which loads a Document by its code.
 - **The router (`BrowserRouter`) wraps `App` in `main.tsx`**, so the tests can render `App` inside a `MemoryRouter` at any URL.
-- **Search matches whole words only.** MiniSearch is used without prefix or fuzzy matching, so "רכב" (car) does not match the inside of a longer word, and "נסיע" finds nothing. Words are split at spaces and punctuation, but a dot or a quote inside a word is kept, so `13.10.1` and `צה"ל` each stay one word.
+- **Search matches whole words only.** MiniSearch is used without prefix matching, so "רכב" (car) does not match the inside of a longer word, and "נסיע" finds nothing. Words are split at spaces and punctuation, but a dot or a quote inside a word is kept, so `13.10.1` and `צה"ל` each stay one word.
+- **Every word is normalized the same way in the index and in the query** (`normalizeWord` in `libs/search`), so the ways Hebrew is really typed all match. In this order:
+  1. lower case
+  2. niqqud (vowel points) removed: `רֶכֶב` → `רכב`. The regular expression `\p{Mn}` matches every mark that sits on a letter.
+  3. quotes removed: `אש״ל` (gershayim), `אש"ל` (ASCII quote) and `אשל` all become `אשל`. The plan said to turn ״ into `"`; removing all quotes does that and also matches the abbreviation typed with no quote, which is how many people type on a phone.
+  4. ו and י removed: `גימלאות` (full spelling) and `גמלאות` (short spelling) both become `גמלאת`.
+  5. one prefix letter (ה ב ל מ ש כ) stripped if at least 2 letters remain: `ברכב`, `הרכב` and `לרכב` become `רכב`. The prefix ו is already gone in step 4, which is also why ו/י come out before the prefix: `והרכב` loses its ו first, then its ה.
+  - The cost: different words can become the same form. `ביטוח` (insurance) and `בטוח` (safe) both become `טח`, and the trap `הרכב התקציב` (the composition of the budget) now matches "רכב". The title weight keeps the real car Directives above it.
+- **Typos are tolerated, scaled to the word's length** (`typosAllowed`): no typo up to 3 letters, one from 4 letters, two from 8, counted after normalization. Short Hebrew words are often one letter apart (`רכב` car, `רכז` coordinator), so they must match exactly. A word with a digit (a Document code or a number) is always matched exactly, so `13.10.1` never finds `13.10.2`. A typo match counts 0.2 of an exact one (MiniSearch's default is 0.45). With 0.45, "תשלום" ranked a Directive whose title has "תשלומים" (one edit away) above the one with "תשלום" in a heading.
 - **Document codes are indexed as two words:** the whole code and the code without its letters (`H.13.10.1` → `h.13.10.1`, `13.10.1`). Typing `13.10.1` finds `H.13.10.1` and not `HZ.13.10.1.1`, because a code is matched as a whole.
 - **Field weights:** a word in the title or the code counts three times as much as a word in a heading. The title says what a Directive is about, while a heading can mention a word in passing.
 - **Validity first.** The filter defaults to In force. When expired Directives are included, every In-force result still comes before every expired one, so an old rule never ranks above a current one. A Directive whose valid-from date is still to come (HOD.13.4.1.2 starts on 2027-01-01) is not In force either, so it gets the same red badge.
@@ -132,7 +140,7 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
 - **The API builds the index from the store once, when it starts** (`SearchService`). It pulls the heading text out of the sanitized HTML with a regular expression. That is safe here because the sanitizer leaves only bare tags such as `<h2>`. A heading stops at its closing tag or at the next block tag, as a guard against a heading that is never closed (as H.13.12.1's was before issue #20). `indexSize` in `/api/health` is the number of Directives in the index.
 - **The search log lives in the store**, as the plan says, so running the API against `data/takam.db` adds rows to the committed file. Run it with `DB_PATH` pointing at a copy if you don't want that. Each ingest builds a new store, so ingest also clears the log.
 - **The results list changes only when a search is submitted.** Typing in the box doesn't search. Ticking the filter re-runs the last submitted query, not the text now in the box.
-- **On the real data, "רכב" finds nothing today.** The only Directive that has the word on its own (HOD.13.4.1.2) is not in force until 2027, and the others say "ברכב" (by car). Stripping one-letter prefixes (issue #7) will fix this.
+- **On the real data, "רכב" now finds H.13.4.1 ("ברכב פרטי") first.** Before prefixes were stripped it found nothing: the only Directive with the word on its own (HOD.13.4.1.2) is not in force until 2027. The trap H.1.1.1 comes second, below the title match.
 - **Vitest runs once, not in watch mode** (`testMode: "run"` in `nx.json`), so `npm test` finishes.
 
 ### Tests and CI
@@ -142,7 +150,7 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
   - the ingest security gate
   - the ingest conversion: the heading style map, on tiny Word files built in the test
   - the sanitizer in `libs/sanitize` (`<script>`, `onerror`, `javascript:` links)
-  - search (`libs/search`): whole words, the "רכב" trap, code lookup, the in-force default, the inclusive valid-to boundary, a future valid-from, snippets, the limit and an empty query
+  - search (`libs/search`): whole words, the "רכב" trap, code lookup, Hebrew spellings (full/short, prefixes, quotes, niqqud), typos, the in-force default, the inclusive valid-to boundary, a future valid-from, snippets, the limit and an empty query
   - the web pages, rendered for real with only `fetch` faked
 - **Integration tests (Jest, `apps/api`):** each one starts the whole Nest app on a random port, on an in-memory or temporary SQLite file, and calls it with `fetch`. They also check the CSP header, that unsafe HTML in the store is sent sanitized, that "רכב" does not put the trap H.1.1.1 first, and that every search writes a row to the search log.
 

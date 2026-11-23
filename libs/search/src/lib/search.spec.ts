@@ -49,6 +49,8 @@ const perDiem = directive({
   code: 'H.13.10.2',
   title: 'נסיעות בתפקיד - קצובות שהייה, לינה והחזרי הוצאות בחוץ לארץ',
   chapterPath: flights.chapterPath,
+  // The real text says "קצובות השהייה והלינה (אש"ל)" in its body.
+  headings: ['תעריפי אש"ל'],
 });
 /** Expired in 2022. */
 const covidFlights = directive({
@@ -74,6 +76,13 @@ const futureRates = directive({
   validFrom: '2027-01-01',
 });
 
+/** Pensions: the title spells "גמלאות" short, without the י. */
+const pensions = directive({
+  code: 'H.13.7.12',
+  title: 'תשלומים לפי חוק שירות המדינה (גמלאות)',
+  chapterPath: ['13 שכר, תנאי שירות וגמלאות', '13.7 תשלומים מיוחדים'],
+});
+
 const index = new DirectiveSearch([
   budgetTerms,
   carInsurance,
@@ -83,6 +92,7 @@ const index = new DirectiveSearch([
   covidFlights,
   perDiemRates,
   futureRates,
+  pensions,
 ]);
 
 const TODAY = '2026-11-23';
@@ -103,8 +113,8 @@ describe('DirectiveSearch', () => {
 
     expect(codes).toContain('HOD.13.4.1.2');
     expect(codes).toContain('H.13.4.1');
-    // The trap may appear once prefixes are stripped (issue #7), but never
-    // above a real car Directive.
+    // The trap does appear, because its "הרכב" loses the prefix ה and
+    // becomes "רכב", but never above a real car Directive.
     const trap = codes.indexOf('H.1.1.1');
     if (trap !== -1) {
       expect(codes.indexOf('HOD.13.4.1.2')).toBeLessThan(trap);
@@ -188,12 +198,49 @@ describe('DirectiveSearch', () => {
   });
 
   it('ranks a match in the title above a match in a heading only', () => {
-    // "רכב" is in the title of HOD.13.4.1.2 but only in a heading of H.13.4.1.
-    expect(codesFor('רכב').slice(0, 2)).toEqual(['HOD.13.4.1.2', 'H.13.4.1']);
+    // "רכב" is in the titles of HOD.13.4.1.2 and H.13.4.1 ("ברכב"), but only
+    // in a heading of the trap H.1.1.1 ("הרכב התקציב").
+    expect(codesFor('רכב')).toEqual(['HOD.13.4.1.2', 'H.13.4.1', 'H.1.1.1']);
   });
 
   it('returns at most `limit` results', () => {
     expect(index.search('בתפקיד', { today: TODAY, limit: 2 })).toHaveLength(2);
+  });
+
+  describe('Hebrew as it is really typed', () => {
+    it('matches the full and the short spelling ("גימלאות" = "גמלאות")', () => {
+      expect(codesFor('גמלאות')).toEqual(['H.13.7.12']);
+      expect(codesFor('גימלאות')).toEqual(codesFor('גמלאות'));
+    });
+
+    it.each(['ברכב', 'הרכב', 'לרכב'])(
+      'ignores one prefix letter: "%s" finds the "רכב" Directives',
+      (query) => {
+        expect(codesFor(query)).toEqual(codesFor('רכב'));
+        expect(codesFor(query)).toContain('HOD.13.4.1.2');
+      },
+    );
+
+    it('tolerates a typo: "רכבב" finds the car Directives', () => {
+      const codes = codesFor('רכבב');
+
+      expect(codes.slice(0, 2)).toEqual(['HOD.13.4.1.2', 'H.13.4.1']);
+    });
+
+    it('allows no typo in a short word, so "רכז" does not find "רכב"', () => {
+      expect(codesFor('רכז')).toEqual([]);
+    });
+
+    it('ignores niqqud (vowel points): "רֶכֶב" finds the "רכב" Directives', () => {
+      expect(codesFor('רֶכֶב')).toEqual(codesFor('רכב'));
+    });
+
+    it.each(['אש"ל', 'אשל', 'אש״ל'])(
+      'matches an abbreviation however its quote is typed ("%s")',
+      (query) => {
+        expect(codesFor(query)).toEqual(['H.13.10.2']);
+      },
+    );
   });
 
   it.each(['', '   '])('returns nothing for an empty query (%j)', (query) => {

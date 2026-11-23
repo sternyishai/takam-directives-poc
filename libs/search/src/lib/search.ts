@@ -63,12 +63,39 @@ function codeWords(code: string): string[] {
 }
 
 /**
- * Turns a word into the form that is indexed and matched. For now only
- * lower case ("H.13.10.1" and "h.13.10.1" match); the Hebrew rules (issue #7)
- * go here.
+ * Turns a word into the form that is indexed and matched, so that the ways
+ * Hebrew is really typed all give the same form:
+ * - lower case: "H.13.10.1" and "h.13.10.1" match
+ * - no niqqud: the vowel points (רֶכֶב) are marks on top of the letters, and
+ *   `\p{Mn}` matches every such mark, so "רֶכֶב" becomes "רכב"
+ * - no quotes: an abbreviation is typed with the Hebrew gershayim (אש״ל), with
+ *   an ASCII quote (אש"ל) or with none (אשל), so ״ ׳ " ' are all dropped
+ * - no ו or י: Hebrew is written with them ("גימלאות", full spelling) or
+ *   without them ("גמלאות", short spelling), so they are ignored
+ * - no prefix letter: "ברכב" (in a car), "הרכב" (the car) and "לרכב" (to a
+ *   car) all become "רכב". One letter is stripped, and only when at least 2
+ *   letters remain. The prefix ו (and) is already gone with the other ו's.
  */
 function normalizeWord(word: string): string {
-  return word.toLowerCase();
+  const letters = word
+    .toLowerCase()
+    .replace(/\p{Mn}/gu, '')
+    .replace(/["'״׳]/g, '')
+    .replace(/[וי]/g, '');
+  return letters.replace(/^[הבלמשכ](?=.{2})/u, '');
+}
+
+/**
+ * How many typos (edits: a letter added, removed or changed) a query word may
+ * have, scaled to its length after normalizeWord: none up to 3 letters (too
+ * many short words are one edit apart, "רכב" and "רכז"), one from 4 letters
+ * ("רכבב" finds "רכב"), two from 8. A word with a digit is a Document code
+ * or a number, and those are matched exactly: "13.10.1" must not find
+ * "13.10.2".
+ */
+function typosAllowed(word: string): number {
+  if (/\d/.test(word)) return 0;
+  return Math.floor(word.length / 4);
 }
 
 /**
@@ -81,8 +108,10 @@ function tokenize(text: string, fieldName?: string): string[] {
 
 /**
  * The search over the Directives, built once in memory (the API builds it when
- * it starts). Matching is on whole words only: "רכב" (car) matches the word
- * "רכב" but not the inside of "הרכב".
+ * it starts). Matching is on whole words only, after normalizeWord: "רכב"
+ * (car) matches "רכב", "הרכב" and "ברכב", but not "רכבת" (train), and "נסיע"
+ * does not match "נסיעות". A typo is tolerated (typosAllowed), but a typo
+ * match is still a whole word one edit or two away, never part of a word.
  */
 export class DirectiveSearch {
   private readonly index: MiniSearch<IndexedDirective>;
@@ -98,6 +127,12 @@ export class DirectiveSearch {
         // A word in the title or the code counts three times as much as a
         // word in a heading: the title says what the Directive is about.
         boost: { title: 3, code: 3, headingText: 1 },
+        fuzzy: typosAllowed,
+        // A match with a typo counts 0.2 of an exact one (MiniSearch's
+        // default is 0.45), so it stays below an exact match even when the
+        // typo is in a title and the exact word only in a heading.
+        // MiniSearch needs a prefix weight too; prefix search is off anyway.
+        weights: { fuzzy: 0.2, prefix: 0 },
       },
     });
     for (const directive of directives) {
