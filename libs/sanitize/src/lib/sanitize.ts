@@ -30,16 +30,17 @@ const ALLOWLIST: sanitizeHtml.IOptions = {
   // A second safety net under the rule below: a link whose address starts
   // with any other scheme (like `javascript:`) loses its href.
   allowedSchemes: ['http', 'https'],
-  transformTags: {
-    // Only links to http(s) addresses stay links. Any other link (a
-    // `javascript:` link, or a link inside the Word file such as
-    // "#footnote-1", which can't work once the ids are removed) becomes a
-    // <span>. <span> is not on the list, so only the link's text is kept.
-    a: (tagName, attribs) =>
-      /^https?:\/\//i.test(attribs.href ?? '')
-        ? { tagName, attribs }
-        : { tagName: 'span', attribs: {} },
-  },
+  // Only links to http(s) addresses stay links. Any other link (a
+  // `javascript:` link, or a link inside the Word file such as "#footnote-1"
+  // or an empty bookmark, which can't work once the ids are removed) loses its
+  // tag and keeps its text: that is what 'excludeTag' means.
+  // (Renaming those links to a disallowed tag in `transformTags` does not
+  // work: sanitize-html 2.18 then closes the next element with the wrong tag,
+  // e.g. `<h2>נספח א</span>`.)
+  exclusiveFilter: (frame) =>
+    frame.tag === 'a' && !/^https?:\/\//i.test(frame.attribs.href ?? '')
+      ? 'excludeTag'
+      : false,
 };
 
 /**
