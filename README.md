@@ -34,9 +34,22 @@ With an empty store it says "במאגר 0 הוראות". You can also run one si
 | `npm test` | every test project (Vitest for the libs, web and ingest; Jest for the API) |
 | `npm run build` | builds every project |
 
-`curl http://localhost:3000/api/health` returns `{"directives":30,"indexSize":0,"lastIngest":"…"}` against the committed store.
+`curl http://localhost:3000/api/health` returns `{"directives":30,"indexSize":30,"lastIngest":"…"}` against the committed store.
 The API opens `data/takam.db` (set `DB_PATH` to use another file). If the file does not exist, the API creates it with an empty schema.
 If the API runs on another port (`PORT=3456 npm run api`), start the web app with `API_URL=http://localhost:3456 npm run web` so its `/api` proxy finds it.
+
+### Search
+```bash
+npm run dev
+```
+Open http://localhost:4200, type a word or a Document code (`נסיעות`, `13.10.1`) and press "חיפוש" (search). The results are a flat list, best match first. Each result shows:
+- its chapter path as numbers (`13 › 13.10 › 13.10.1`)
+- its Directive type
+- a snippet (the heading that matched, or the opening of the text)
+- a red "לא בתוקף" (not in force) badge if it is not in force
+
+Only In-force Directives are shown until you tick "הצג גם הוראות שאינן בתוקף" (show Directives that are not in force too).
+The API is `GET /api/search?q=…&inForce=true&limit=20`. `inForce` is true unless it is `false`, and `limit` is 1 to 50. Every search adds a row to the `search_log` table: the query, the filter, the number of results and the time.
 
 ### Read a Directive
 The store (`data/takam.db`) is committed with the 30 Directives in it, so this needs no network:
@@ -68,11 +81,11 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
 | Project | What it is |
 |---|---|
 | `apps/web` | React + Vite, Hebrew and right-to-left (`<html lang="he" dir="rtl">`) |
-| `apps/api` | NestJS: `GET /api/health` and `GET /api/directives/:code` |
+| `apps/api` | NestJS: `GET /api/health`, `GET /api/search` and `GET /api/directives/:code` |
 | `apps/ingest` | Node CLI that fills the store: Takam site client, security gate, Mammoth conversion |
-| `libs/search` | Hebrew normalization and MiniSearch (milestone 2) |
+| `libs/search` | `DirectiveSearch`: MiniSearch over the title, Document code and headings; Hebrew normalization comes in issue #7 |
 | `libs/llm` | LangChain models, enrichment, chat (milestone 6) |
-| `libs/shared` | types shared by the API and the web app (`HealthReport`, `Directive`), plus `isInForce` and `officialPageUrl` |
+| `libs/shared` | types shared by the API and the web app (`HealthReport`, `Directive`, `SearchResult`), plus `isInForce`, `todayInIsrael` and `officialPageUrl` |
 | `libs/store` | the SQLite schema and the `Store` class: ingest writes to it, the API reads from it |
 
 ### Decisions made while building
@@ -109,7 +122,16 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
 - **The API sends `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` on every response**, errors included. The API only sends JSON, so it may load nothing, and no site may frame it. The header is set in `configureApp` (`apps/api/src/app/configure-app.ts`), which `main.ts` and the e2e tests share, so the tests run the same setup as the real server. The page's own CSP belongs to whatever serves the built web app (see the production HLD).
 - **The official link is `https://takam.mof.gov.il/document/{code}`.** This is the site's own Angular route, `document/:id`, which loads a Document by its code.
 - **The router (`BrowserRouter`) wraps `App` in `main.tsx`**, so the tests can render `App` inside a `MemoryRouter` at any URL.
-- **`indexSize` is 0 for now.** The MiniSearch index is built in milestone 4.
+- **Search matches whole words only.** MiniSearch is used without prefix or fuzzy matching, so "רכב" (car) does not match the inside of a longer word, and "נסיע" finds nothing. Words are split at spaces and punctuation, but a dot or a quote inside a word is kept, so `13.10.1` and `צה"ל` each stay one word.
+- **Document codes are indexed as two words:** the whole code and the code without its letters (`H.13.10.1` → `h.13.10.1`, `13.10.1`). Typing `13.10.1` finds `H.13.10.1` and not `HZ.13.10.1.1`, because a code is matched as a whole.
+- **Field weights:** a word in the title or the code counts three times as much as a word in a heading. The title says what a Directive is about, while a heading can mention a word in passing.
+- **Validity first.** The filter defaults to In force. When expired Directives are included, every In-force result still comes before every expired one, so an old rule never ranks above a current one. A Directive whose valid-from date is still to come (HOD.13.4.1.2 starts on 2027-01-01) is not In force either, so it gets the same red badge.
+- **`search()` takes today's date as an argument** (`{ today }`) instead of reading the clock, so the tests can check the inclusive valid-to boundary on any day. The API passes `todayInIsrael()`, which moved from the directives controller to `libs/shared` so both controllers use it.
+- **The snippet is the first heading that contains a matched word**, or else the first 200 characters of the text. The summary from enrichment (issue #9) will replace that fallback.
+- **The API builds the index from the store once, when it starts** (`SearchService`). It pulls the heading text out of the sanitized HTML with a regular expression. That is safe here because the sanitizer leaves only bare tags such as `<h2>`. A heading stops at its closing tag or at the next block tag, because a few stored headings are never closed (H.13.12.1). `indexSize` in `/api/health` is the number of Directives in the index.
+- **The search log lives in the store**, as the plan says, so running the API against `data/takam.db` adds rows to the committed file. Run it with `DB_PATH` pointing at a copy if you don't want that. Each ingest builds a new store, so ingest also clears the log.
+- **The results list changes only when a search is submitted.** Typing in the box doesn't search. Ticking the filter re-runs the last submitted query, not the text now in the box.
+- **On the real data, "רכב" finds nothing today.** The only Directive that has the word on its own (HOD.13.4.1.2) is not in force until 2027, and the others say "ברכב" (by car). Stripping one-letter prefixes (issue #7) will fix this.
 - **Vitest runs once, not in watch mode** (`testMode: "run"` in `nx.json`), so `npm test` finishes.
 
 ### Tests and CI
@@ -119,8 +141,9 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
   - the ingest security gate
   - the ingest conversion: the heading style map, on tiny Word files built in the test
   - the sanitizer in `libs/sanitize` (`<script>`, `onerror`, `javascript:` links)
+  - search (`libs/search`): whole words, the "רכב" trap, code lookup, the in-force default, the inclusive valid-to boundary, a future valid-from, snippets, the limit and an empty query
   - the web pages, rendered for real with only `fetch` faked
-- **Integration tests (Jest, `apps/api`):** each one starts the whole Nest app on a random port, on an in-memory or temporary SQLite file, and calls it with `fetch`. They also check the CSP header, and that unsafe HTML in the store is sent sanitized.
+- **Integration tests (Jest, `apps/api`):** each one starts the whole Nest app on a random port, on an in-memory or temporary SQLite file, and calls it with `fetch`. They also check the CSP header, that unsafe HTML in the store is sent sanitized, that "רכב" does not put the trap H.1.1.1 first, and that every search writes a row to the search log.
 
 No test needs the network or an API key.
 

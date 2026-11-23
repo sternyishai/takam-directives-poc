@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { HealthReport } from '@takam/shared';
+import { Search } from './search';
 
 export function HomePage() {
   // null while we wait for the API; set once it answers.
@@ -24,7 +25,8 @@ export function HomePage() {
   return (
     <main>
       <h1>הוראות תכ"ם</h1>
-      <p>{status}</p>
+      <Search />
+      <p className="store-status">{status}</p>
     </main>
   );
 }
