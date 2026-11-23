@@ -32,18 +32,20 @@ export interface IngestResult {
    * file, the code is not on the site, or the Document is not a Directive.
    */
   rejected: number;
-  /** false when too many files were rejected and the old store was kept. */
+  /** Directives stored without enrichment, because the LLM failed twice. */
+  enrichmentFailed: number;
+  /**
+   * false when too many files were rejected, or too many enrichments
+   * failed, and the old store was kept.
+   */
   replacedStore: boolean;
 }
 
-/** What a Directive needs from the outside world: the site, and an LLM to enrich it. */
-interface Sources {
-  site: TakamSite;
-  model: ChatModel;
-}
-
-/** A run that rejects more than this share of the files keeps the old store. */
-const MAX_REJECTED_SHARE = 0.2; // 20%
+/**
+ * A run in which more than this share of the files are rejected, or more
+ * than this share of the enrichments fail, keeps the old store.
+ */
+const MAX_FAILED_SHARE = 0.2; // 20%
 
 function isDirectiveType(type: string): type is DirectiveType {
   return (DIRECTIVE_TYPES as readonly string[]).includes(type);
@@ -64,7 +66,10 @@ function isDirectiveType(type: string): type is DirectiveType {
  *
  * Each Directive is enriched by `model` (libs/llm). A Directive whose
  * enrichment fails is still stored, with the reason, and is not counted as
- * rejected: it can still be found by its title and headings, and read.
+ * rejected: it can still be found by its title and headings, and read. But
+ * if more than 20% of the enrichments fail, the LLM is down or its key has
+ * run out, and the old (enriched) store is better than the new one, so it is
+ * kept, the same way as for rejected files.
  */
 export async function runIngest(
   codes: string[],
@@ -78,10 +83,19 @@ export async function runIngest(
   const store = new Store(tempPath);
   const rawFolder = join(dirname(dbPath), 'raw');
   let rejected = 0;
+  let enrichmentFailed = 0;
 
   for (const code of codes) {
     try {
-      await ingestDirective(code, documents, { site, model }, store, rawFolder);
+      const enriched = await ingestDirective(
+        code,
+        documents,
+        site,
+        model,
+        store,
+        rawFolder,
+      );
+      if (!enriched) enrichmentFailed++;
       console.log(`✓ ${code}`);
     } catch (error) {
       rejected++;
@@ -90,30 +104,38 @@ export async function runIngest(
   }
 
   const stored = codes.length - rejected;
-  if (rejected > codes.length * MAX_REJECTED_SHARE) {
+  const limit = codes.length * MAX_FAILED_SHARE;
+  if (rejected > limit || enrichmentFailed > limit) {
     store.close();
     rmSync(tempPath);
     console.error(
-      `${rejected} of ${codes.length} rejected, more than 20%: the old store in ${dbPath} is kept`,
+      `${rejected} rejected and ${enrichmentFailed} not enriched, of ${codes.length}: ` +
+        `more than 20% failed, so the old store in ${dbPath} is kept`,
     );
-    return { stored, rejected, replacedStore: false };
+    return { stored, rejected, enrichmentFailed, replacedStore: false };
   }
 
   store.recordIngestRun(new Date().toISOString());
   store.close();
   renameSync(tempPath, dbPath);
-  console.log(`${stored} of ${codes.length} stored in ${dbPath}`);
-  return { stored, rejected, replacedStore: true };
+  console.log(
+    `${stored} of ${codes.length} stored in ${dbPath} (${enrichmentFailed} not enriched)`,
+  );
+  return { stored, rejected, enrichmentFailed, replacedStore: true };
 }
 
-/** Ingests one Directive into the store. Throws an Error with the reason if it can't. */
+/**
+ * Ingests one Directive into the store, and returns whether its enrichment
+ * worked. Throws an Error with the reason if it can't store it at all.
+ */
 async function ingestDirective(
   code: string,
   documents: SiteDocument[],
-  { site, model }: Sources,
+  site: TakamSite,
+  model: ChatModel,
   store: Store,
   rawFolder: string,
-): Promise<void> {
+): Promise<boolean> {
   // Selected on the Document code, so Temporary Instructions and Messages
   // (whose codes start HZ. and HOD.) are found the same way as Instructions.
   const document = documents.find((d) => d.documentcodetext === code);
@@ -158,4 +180,5 @@ async function ingestDirective(
     enrichment: enrichment.ok ? enrichment.enrichment : null,
     enrichmentError: enrichment.ok ? null : enrichment.error,
   });
+  return enrichment.ok;
 }

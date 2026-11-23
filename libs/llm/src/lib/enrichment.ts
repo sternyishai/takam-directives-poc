@@ -8,7 +8,7 @@ import { z } from 'zod';
 import type { ChatModel } from './models.js';
 
 /** Any Hebrew letter (the Unicode block א–ת, with niqqud and punctuation). */
-const HEBREW_LETTER = /[֐-׿]/;
+const HEBREW_LETTER = /[\u0590-\u05FF]/;
 
 /**
  * A non-empty text with at least one Hebrew letter. A `refine` is checked
@@ -103,7 +103,9 @@ export async function enrichDirective(
       if (checked.success) return { ok: true, enrichment: checked.data };
       error = z.prettifyError(checked.error);
     } catch (thrown) {
-      error = (thrown as Error).message;
+      // Usually an Error (a network failure, or a reply that is not JSON),
+      // but JavaScript can throw anything, so String() covers the rest.
+      error = thrown instanceof Error ? thrown.message : String(thrown);
     }
   }
   return { ok: false, error };

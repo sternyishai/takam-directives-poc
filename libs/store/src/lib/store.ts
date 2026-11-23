@@ -67,8 +67,8 @@ function toStoredDirective(row: DirectiveRow): StoredDirective {
         ? null
         : {
             summary,
-            keywords: JSON.parse(keywords ?? '[]'),
-            questions: JSON.parse(questions ?? '[]'),
+            keywords: JSON.parse(keywords as string),
+            questions: JSON.parse(questions as string),
           },
   };
 }

@@ -76,8 +76,8 @@ For each code, ingest does the following:
 6. Writes it to a new store, `data/takam.db.tmp`.
 
 It prints `✓` or `✗ <reason>` for each code, and a line for each enrichment failure. Then:
-- If at most 20% of the files were rejected, it records the time of the run and moves the new store over `data/takam.db`.
-- If more than 20% were rejected, it deletes the new store, keeps the old one, and exits with code 1.
+- If at most 20% of the files were rejected and at most 20% of the enrichments failed, it records the time of the run and moves the new store over `data/takam.db`.
+- Otherwise it deletes the new store, keeps the old one, and exits with code 1.
 The raw files are kept in `data/raw/`, which is gitignored and never served.
 `GET /api/directives/:code` returns the stored Directive, or 404 for an unknown code.
 
@@ -155,7 +155,8 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
 - **On the real data, "רכב" now finds H.13.4.1 ("ברכב פרטי") first.** Before prefixes were stripped it found nothing: the only Directive with the word on its own (HOD.13.4.1.2) is not in force until 2027. The trap H.1.1.1 comes second, below the title match.
 - **Enrichment** (`libs/llm`, issue #9). Ingest makes one Gemini call per Directive. The call returns `{ summary, keywords[], questions[] }` in Hebrew and goes through LangChain's `withStructuredOutput` with a zod schema (ADR 0002).
   - **Every reply is checked against the zod schema in our code**, not only by the model's own parser. The schema requires a non-empty summary, 1–15 keywords and 1–10 questions, each with at least one Hebrew letter. LangChain's fake model in the tests does not check its replies, and a `refine` (the Hebrew check) is never sent to the model, so only zod can run it.
-  - **One retry.** A reply that does not match, or a call that throws, is tried once more. If the second try also fails, the Directive is still stored, with `enrichment_error` set and no enrichment. It is not counted as rejected for the 20% rule: it can still be found by its title, code and headings, and read. A bad LLM day must not throw away a good store.
+  - **One retry.** A reply that does not match, or a call that throws (a network error, or a reply that is not JSON), is tried once more. If the second try also fails, the Directive is still stored, with `enrichment_error` set and no enrichment: it can still be found by its title, code and headings, and read.
+  - **Enrichment failures have their own 20% rule.** A failed enrichment is not a rejected file, but if more than 20% of them fail, the LLM is down or the key has run out, and the new store would be worse than the old one. Then ingest keeps the old store and exits with code 1, as it does for rejected files. One or two failures are logged and the run goes on.
   - **The model gets the code, the title and up to 20,000 characters of the plain text** (the HTML with its tags removed by `htmlToText`, which moved from the API to `libs/sanitize` so ingest can use it too). Most Directives are shorter. For the longest ones, the opening already says what they are about, and the limit keeps their cost close to the rest. The instructions and the field descriptions are in Hebrew, so the model answers in Hebrew.
   - **temperature 0**, so a re-run gives (nearly) the same enrichment.
   - **The model names were checked against the key** on 2026-11-24: `gemini-3.6-flash` answers `generateContent` and `gemini-embedding-001` answers `embedContent` (3,072 dimensions), so `.env.example` keeps them. One real call takes about 8 seconds, and the full run of 30 enriched all 30 with no failures.
@@ -163,7 +164,8 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
   - **The API sends only the summary** (`summary` in `GET /api/directives/:code`, `null` when enrichment failed). The keywords and questions are only for search.
   - **The viewer shows the summary at the top**, under the title, in a box labelled "תקציר" (summary) with the note "נכתב על ידי מודל שפה. הנוסח המחייב הוא נוסח ההוראה." (written by a language model; the Directive's own wording is what binds). There is no box when enrichment failed.
   - **The plan put keywords above headings in the weights; this issue put all of the enrichment below them.** We follow the issue: the headings are the Directive's own text, while the enrichment is the model's reading of it.
-  - **What it fixed on the real data:** neither Expired Directive has keywords on the site. Now `בידוד` (isolation) finds HZ.13.10.1.1, and `זקיפת` (imputing a benefit) finds HOD.13.5.1.1, through words that are only in their summaries.
+  - **What it fixed on the real data:** neither Expired Directive has keywords on the site. Now `עלויות` (costs) finds HZ.13.10.1.1 and `ייעודיות` (dedicated) finds HOD.13.5.1.1. Each word is only in the Directive's summary, not in its title, text, keywords or questions. `apps/api/src/search/committed-store.spec.ts` checks this on the committed store, and also checks that the word stops finding the Directive once its summary is removed. Finding the words took a test, not a text search: a word can look absent but still match after normalization or as a typo (`להתקנה` did).
+  - **`libs/llm` has no tests of its own** (`passWithNoTests` in its Vitest config). Enrichment is tested where ingest uses it, with the fake model, which is the seam the issue named. A second set of tests on the lib would test the same behaviour twice.
   - **`data/export/` holds one JSON file per Directive** (`npm run export`), with every stored field and the HTML last, so the enrichment can be shown without opening SQLite. The files are a committed copy for people to read; the app reads only `data/takam.db`. Run the export again after each ingest.
   - **`.env` is read by ingest with Node's own `process.loadEnvFile`**, so there is no dotenv dependency. A variable already set in the shell wins.
 - **Vitest runs once, not in watch mode** (`testMode: "run"` in `nx.json`), so `npm test` finishes.
@@ -176,9 +178,9 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
   - the ingest conversion: the heading style map, on tiny Word files built in the test
   - the sanitizer in `libs/sanitize` (`<script>`, `onerror`, `javascript:` links)
   - search (`libs/search`): whole words, the "רכב" trap, code lookup, Hebrew spellings (full/short, prefixes, quotes, niqqud), typos, the in-force default, the inclusive valid-to boundary, a future valid-from, snippets, the limit, an empty query, and the enrichment (both Expired Directives found by a summary word, enrichment ranked below headings)
-  - ingest with LangChain's fake chat model: an invalid first reply followed by a valid retry is accepted, and two invalid replies are stored as an enrichment failure
+  - ingest with LangChain's fake chat model: an invalid first reply followed by a valid retry is accepted, two bad replies (one not JSON, one not Hebrew) are stored as an enrichment failure, and more than 20% failures keep the old store
   - the web pages, rendered for real with only `fetch` faked
-- **Integration tests (Jest, `apps/api`):** each one starts the whole Nest app on a random port, on an in-memory or temporary SQLite file, and calls it with `fetch`. They also check the CSP header, that unsafe HTML in the store is sent sanitized, that "רכב" does not put the trap H.1.1.1 first, and that every search writes a row to the search log.
+- **Integration tests (Jest, `apps/api`):** each one starts the whole Nest app on a random port, on an in-memory or temporary SQLite file, and calls it with `fetch`. They also check the CSP header, that unsafe HTML in the store is sent sanitized, that "רכב" does not put the trap H.1.1.1 first, and that every search writes a row to the search log. One more test reads a copy of the committed store and checks that both Expired Directives are found by a word only their summary has.
 
 No test needs the network or an API key.
 
