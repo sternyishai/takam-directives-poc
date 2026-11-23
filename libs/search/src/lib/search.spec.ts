@@ -36,7 +36,7 @@ const carExpenses = directive({
   code: 'H.13.4.1',
   title: 'החזר הוצאות נסיעה בתפקיד ברכב פרטי',
   chapterPath: ['13 שכר, תנאי שירות וגמלאות', '13.4 נסיעות בתפקיד בארץ'],
-  headings: ['מבוא', 'רמת ניידות והחזר הוצאות רכב'],
+  headings: ['מבוא', 'רמת ניידות והחזר הוצאות רכב', 'ישיבת הוועדה'],
 });
 const flights = directive({
   code: 'H.13.10.1',
@@ -233,6 +233,13 @@ describe('DirectiveSearch', () => {
 
     it('ignores niqqud (vowel points): "רֶכֶב" finds the "רכב" Directives', () => {
       expect(codesFor('רֶכֶב')).toEqual(codesFor('רכב'));
+    });
+
+    it('strips a prefix letter only from the start of the word as typed', () => {
+      // "ישיבת" (meeting of) starts with י, not a prefix letter, so its ש
+      // stays: "בת" (daughter) must not find it.
+      expect(codesFor('ישיבת')).toEqual(['H.13.4.1']);
+      expect(codesFor('בת')).toEqual([]);
     });
 
     it.each(['אש"ל', 'אשל', 'אש״ל'])(
