@@ -1,0 +1,7 @@
+/* Global styles. The page direction (rtl) and language (he) are set on <html> in index.html. */
+body {
+  margin: 0 auto;
+  max-width: 60rem;
+  padding: 1rem;
+  font-family: Arial, 'Noto Sans Hebrew', sans-serif;
+}

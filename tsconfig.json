@@ -1,0 +1,26 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compileOnSave": false,
+  "files": [],
+  "references": [
+    {
+      "path": "./apps/web"
+    },
+    {
+      "path": "./apps/api"
+    },
+    {
+      "path": "./apps/ingest"
+    },
+    {
+      "path": "./libs/search"
+    },
+    {
+      "path": "./libs/llm"
+    },
+    {
+      "path": "./libs/shared"
+    }
+  ],
+  "compilerOptions": {}
+}

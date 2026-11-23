@@ -1,10 +1,37 @@
+# dependencies and build output
 node_modules/
 dist/
+tmp/
+out-tsc/
+coverage/
+test-output/
+
+# Nx
+.nx/cache
+.nx/workspace-data
+
+# secrets: only the example is committed
 .env
 .env.*
 !.env.example
-__pycache__/
-.venv/
+
+# raw downloads are never committed or served (see docs/plan.md)
+data/raw/
+# the store is committed once ingest fills it (milestone 3, ADR 0003); until then it is an empty local file
+data/takam.db
+
+# editors and system files
+.vscode/*
+!.vscode/extensions.json
+.idea/
 .DS_Store
 *.log
-coverage/
+
+# Python leftovers
+__pycache__/
+.venv/
+
+vite.config.*.timestamp*
+vitest.config.*.timestamp*
+.vitest
+
