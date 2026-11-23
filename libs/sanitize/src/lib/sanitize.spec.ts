@@ -37,4 +37,13 @@ describe('sanitizeDirectiveHtml', () => {
 
     expect(sanitizeDirectiveHtml(html)).toBe('<p>[1]</p>');
   });
+
+  // H.13.12.1: Word puts an empty bookmark link before an appendix heading.
+  // sanitize-html once closed the heading with </span> after removing it.
+  it.each([
+    ['a bookmark', '<a id="נספח_א"></a><h2>נספח א</h2><p>הגדרות</p>'],
+    ['a #… link', '<a href="#נספח_א"></a><h2>נספח א</h2><p>הגדרות</p>'],
+  ])('keeps the next heading closed after removing %s', (_name, html) => {
+    expect(sanitizeDirectiveHtml(html)).toBe('<h2>נספח א</h2><p>הגדרות</p>');
+  });
 });
