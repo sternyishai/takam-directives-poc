@@ -52,6 +52,33 @@ describe('checkFile (the security gate)', () => {
     });
   });
 
+  it('rejects a zip with 200 entries or more (a zip bomb)', async () => {
+    const names = ['word/document.xml'];
+    for (let i = 1; i < 200; i++) names.push(`word/media/image${i}.png`);
+    const file = await zipWith(...names);
+
+    expect(await checkFile(file)).toEqual({
+      ok: false,
+      reason: 'a zip with 200 entries or more, likely a zip bomb',
+    });
+  });
+
+  it('rejects a zip that expands to 20 MB or more (a zip bomb)', async () => {
+    // 21 MB of zeros compresses to about 20 KB: tiny on disk, huge in memory.
+    const zip = new JSZip();
+    zip.file('word/document.xml', new Uint8Array(21 * 1024 * 1024));
+    const file = await zip.generateAsync({
+      type: 'uint8array',
+      compression: 'DEFLATE',
+    });
+    expect(file.length).toBeLessThan(2 * 1024 * 1024); // gets past the size check
+
+    expect(await checkFile(file)).toEqual({
+      ok: false,
+      reason: 'a zip that expands to 20 MB or more, likely a zip bomb',
+    });
+  });
+
   it('rejects a file that starts like a zip but is damaged', async () => {
     const broken = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3]);
 

@@ -17,8 +17,6 @@ test-output/
 
 # raw downloads are never committed or served (see docs/plan.md)
 data/raw/
-# the store is committed once ingest fills it (milestone 3, ADR 0003); until then it is an empty local file
-data/takam.db
 
 # editors and system files
 .vscode/*
