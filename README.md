@@ -49,6 +49,8 @@ Open http://localhost:4200, type a word or a Document code (`נסיעות`, `13.
 - a red "לא בתוקף" (not in force) badge if it is not in force
 
 Only In-force Directives are shown until you tick "הצג גם הוראות שאינן בתוקף" (show Directives that are not in force too).
+
+While you type, a dropdown under the box shows the top 3 matches, each with its Document code, title and a green "בתוקף" (in force) or red "לא בתוקף" badge. The arrow keys move the selection, Enter opens the selected Directive, and Escape closes the dropdown. Clicking an entry opens it too. Enter with nothing selected, or the "חיפוש" button, shows the full results.
 The API is `GET /api/search?q=…&inForce=true&limit=20`. `inForce` is true unless it is `false`, and `limit` is 1 to 50. Every search adds a row to the `search_log` table: the query, the filter, the number of results and the time.
 
 ### Read a Directive
@@ -139,6 +141,12 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
 - **The snippet is the first heading that contains a matched word**, or else the first 200 characters of the text. The summary from enrichment (issue #9) will replace that fallback.
 - **The API builds the index from the store once, when it starts** (`SearchService`). It pulls the heading text out of the sanitized HTML with a regular expression. That is safe here because the sanitizer leaves only bare tags such as `<h2>`. A heading stops at its closing tag or at the next block tag, as a guard against a heading that is never closed (as H.13.12.1's was before issue #20). `indexSize` in `/api/health` is the number of Directives in the index.
 - **The search log lives in the store**, as the plan says, so running the API against `data/takam.db` adds rows to the committed file. Run it with `DB_PATH` pointing at a copy if you don't want that. Each ingest builds a new store, so ingest also clears the log.
+- **The quick-search dropdown is hand-written, with no combobox library.** It calls the same endpoint as the full results, with the same filter and `limit=3`. The API cuts one ranking to the limit, so the dropdown always shows the first 3 of the full results, in the same order. On the real data, "נסיעות" gives H.13.10.3, H.13.10.1 and H.13.10.2 in both.
+  - It searches 150 ms after typing stops. Each keystroke restarts a `setTimeout` in a `useEffect`, and the effect's cleanup clears the previous one, so a fast typist sends one request, not one per letter. A late answer to an older query is ignored, as in the full results.
+  - Typing opens it, and Escape or a submit closes it. Escape calls `preventDefault`, because in a `type="search"` box the browser would also empty the box.
+  - The selected entry is an index (`-1` for none) kept in state. Enter on a selected entry calls `navigate` and `preventDefault`, so the form is not submitted. With nothing selected, Enter is left to the form.
+  - It does not close when the box loses focus. Closing on blur hides the entry before a click on it lands (blur comes first), and the plan leaves full dropdown accessibility out of scope.
+  - If the dropdown's request fails, it stays empty: it is only a shortcut, and the full results report the error.
 - **The results list changes only when a search is submitted.** Typing in the box doesn't search. Ticking the filter re-runs the last submitted query, not the text now in the box.
 - **On the real data, "רכב" now finds H.13.4.1 ("ברכב פרטי") first.** Before prefixes were stripped it found nothing: the only Directive with the word on its own (HOD.13.4.1.2) is not in force until 2027. The trap H.1.1.1 comes second, below the title match.
 - **Vitest runs once, not in watch mode** (`testMode: "run"` in `nx.json`), so `npm test` finishes.
