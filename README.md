@@ -28,6 +28,7 @@ With an empty store it says "במאגר 0 הוראות". You can also run one si
 | `npm run web` | the web app (Vite dev server, port 4200; `/api` is proxied to port 3000) |
 | `npm run api` | the NestJS API (port 3000, or `PORT`) |
 | `npm run ingest` | downloads, checks, converts and enriches the 30 Directives in `apps/ingest/ingest.config.json` into a new store (needs `GOOGLE_API_KEY`) |
+| `npm run export` | writes each Directive in the store, enrichment included, to `data/export/<code>.json`, to read without SQLite |
 | `npm run lint` | ESLint on every project |
 | `npm run format:check` | Prettier: fails if any code file is not formatted (`npm run format` fixes them) |
 | `npm run typecheck` | TypeScript on every project |
@@ -163,6 +164,7 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
   - **The viewer shows the summary at the top**, under the title, in a box labelled "תקציר" (summary) with the note "נכתב על ידי מודל שפה. הנוסח המחייב הוא נוסח ההוראה." (written by a language model; the Directive's own wording is what binds). There is no box when enrichment failed.
   - **The plan put keywords above headings in the weights; this issue put all of the enrichment below them.** We follow the issue: the headings are the Directive's own text, while the enrichment is the model's reading of it.
   - **What it fixed on the real data:** neither Expired Directive has keywords on the site. Now `בידוד` (isolation) finds HZ.13.10.1.1, and `זקיפת` (imputing a benefit) finds HOD.13.5.1.1, through words that are only in their summaries.
+  - **`data/export/` holds one JSON file per Directive** (`npm run export`), with every stored field and the HTML last, so the enrichment can be shown without opening SQLite. The files are a committed copy for people to read; the app reads only `data/takam.db`. Run the export again after each ingest.
   - **`.env` is read by ingest with Node's own `process.loadEnvFile`**, so there is no dotenv dependency. A variable already set in the shell wins.
 - **Vitest runs once, not in watch mode** (`testMode: "run"` in `nx.json`), so `npm test` finishes.
 
