@@ -16,5 +16,8 @@
   "nx": {
     "name": "search"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@takam/shared": "*",
+    "minisearch": "^7.2.0"
+  }
 }

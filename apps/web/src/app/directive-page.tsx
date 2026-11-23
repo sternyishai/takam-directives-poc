@@ -1,13 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
-import type { Directive, DirectiveType } from '@takam/shared';
-
-/** The Hebrew label for each Directive type. */
-const TYPE_LABELS: Record<DirectiveType, string> = {
-  Instruction: 'הוראה',
-  'Temporary Instruction': 'הוראת שעה',
-  Message: 'הודעה',
-};
+import type { Directive } from '@takam/shared';
+import { TYPE_LABELS } from './labels';
 
 /** "2026-01-11" → "11/01/2026", the way dates are written in Israel. */
 function formatDate(isoDate: string): string {

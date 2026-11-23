@@ -19,4 +19,13 @@ export const SCHEMA = `
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     finished_at TEXT NOT NULL     -- ISO 8601 timestamp
   );
+
+  -- One row per search, so an operator can watch the share of 0-result searches.
+  CREATE TABLE IF NOT EXISTS search_log (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    query         TEXT NOT NULL,
+    in_force_only INTEGER NOT NULL,  -- 1: only In-force Directives, 0: expired ones too
+    result_count  INTEGER NOT NULL,
+    searched_at   TEXT NOT NULL      -- ISO 8601 timestamp
+  );
 `;
