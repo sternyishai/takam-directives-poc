@@ -151,6 +151,15 @@ describe('answerQuestion', () => {
     expect(invoke).toHaveBeenCalledTimes(1);
   });
 
+  it('gives found: false when the model says it found no answer, even with a valid Citation', async () => {
+    const result = await answerQuestion(question, {
+      model: fakeChatModel([`${NO_ANSWER} [1].`]),
+      retrieve: () => [payment],
+    });
+
+    expect(result).toEqual({ answer: NO_ANSWER, citations: [], found: false });
+  });
+
   it('answers "no answer" without calling the model when nothing is retrieved', async () => {
     const model = fakeChatModel(['תשובה [1].']);
     const invoke = vi.spyOn(model, 'invoke');

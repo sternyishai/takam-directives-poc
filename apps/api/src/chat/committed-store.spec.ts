@@ -26,9 +26,10 @@ describe('retrieval over the committed store', () => {
   });
 
   it('gives the recuperation-pay Directives for "מה התעריף לקצובת הבראה?"', () => {
-    const found = passages.search('מה התעריף לקצובת הבראה?', {
-      today: '2026-11-24',
-    });
+    // The top 5, as the chatbot keeps them.
+    const found = passages
+      .search('מה התעריף לקצובת הבראה?', '2026-11-24')
+      .slice(0, 5);
 
     expect(found).toHaveLength(5);
     // The rates (HOD.13.3.1.1) and how they are paid (H.13.3.1), and nothing else.

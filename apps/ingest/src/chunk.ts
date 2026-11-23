@@ -1,4 +1,4 @@
-// Chunking: a Directive's HTML → the passages the chatbot answers from.
+// Chunking: a Directive's HTML → the chunks the chatbot's retrieval searches.
 // A chunk is one section (a heading and the paragraphs under it), or a part
 // of a long section. Each chunk starts with a context line saying where it is
 // from, so a passage makes sense on its own, and so retrieval also matches

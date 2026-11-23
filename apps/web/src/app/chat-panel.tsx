@@ -50,6 +50,7 @@ export function ChatPanel() {
           aria-label="השאלה"
           placeholder="למשל: מה התעריף לקצובת הבראה?"
           rows={3}
+          maxLength={500} // the API's limit (MAX_QUESTION_LENGTH)
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
         />

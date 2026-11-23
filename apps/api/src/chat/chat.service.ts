@@ -23,21 +23,16 @@ export class ChatService {
     );
   }
 
-  /** false when there is no model (no key): the chatbot is off. */
-  get available(): boolean {
-    return this.model !== null;
-  }
-
   /**
    * Answers the question with checked Citations (libs/llm). Throws if there
-   * is no model, or the model fails.
+   * is no model (no key), or the model fails.
    */
   answer(question: string): Promise<ChatAnswer> {
-    if (!this.model) throw new Error('no chat model');
+    if (!this.model) throw new Error('the chatbot is off: no LLM key');
     const today = todayInIsrael();
     return answerQuestion(question, {
       model: this.model,
-      retrieve: (text) => this.passages.search(text, { today }),
+      retrieve: (text) => this.passages.search(text, today),
     });
   }
 }

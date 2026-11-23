@@ -1,8 +1,8 @@
 import { Logger } from '@nestjs/common';
+import { existsSync } from 'node:fs';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app/app.module';
 import { configureApp } from './app/configure-app';
-import { existsSync } from 'node:fs';
 
 // The chatbot's key and model (GOOGLE_API_KEY, LLM_MODEL), read with Node's
 // own .env reader, as in ingest. A variable already set in the shell wins.

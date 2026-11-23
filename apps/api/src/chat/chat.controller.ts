@@ -22,16 +22,13 @@ export class ChatController {
   /**
    * POST /api/chat {"question": "…"} → {answer, citations, found}.
    * 400 without a usable question. 503 when the chatbot is off (no key) or
-   * the model failed; the web page then says chat is unavailable, and
+   * the model failed (ChatService throws in both cases); the web page then says chat is unavailable, and
    * search and the viewer keep working.
    */
   @Post()
   @HttpCode(200) // Nest's default for a POST is 201 Created; nothing is created
   async ask(@Body() body: unknown): Promise<ChatAnswer> {
     const question = questionFrom(body);
-    if (!this.chat.available) {
-      throw new ServiceUnavailableException('The chatbot is off: no LLM key');
-    }
     try {
       return await this.chat.answer(question);
     } catch (error) {
@@ -44,7 +41,8 @@ export class ChatController {
 
 /**
  * The question from the request body, trimmed. Throws 400 if it is missing,
- * not text, empty, or longer than MAX_QUESTION_LENGTH.
+ * not text, empty, or longer than MAX_QUESTION_LENGTH once trimmed. The web
+ * panel's box stops at the same length, so this only stops other callers.
  */
 function questionFrom(body: unknown): string {
   const question =
@@ -54,10 +52,11 @@ function questionFrom(body: unknown): string {
   if (typeof question !== 'string' || question.trim() === '') {
     throw new BadRequestException('Send {"question": "…"} with some text');
   }
-  if (question.length > MAX_QUESTION_LENGTH) {
+  const trimmed = question.trim();
+  if (trimmed.length > MAX_QUESTION_LENGTH) {
     throw new BadRequestException(
       `A question may be at most ${MAX_QUESTION_LENGTH} characters`,
     );
   }
-  return question.trim();
+  return trimmed;
 }

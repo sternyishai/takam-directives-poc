@@ -13,9 +13,6 @@ export interface SearchableChunk {
   text: string;
 }
 
-/** How many passages a search returns when no limit is given. */
-export const DEFAULT_PASSAGE_LIMIT = 5;
-
 /**
  * The chatbot's retrieval: a search over the chunks of every Directive,
  * built once in memory. It matches words the same way as DirectiveSearch
@@ -43,32 +40,21 @@ export class PassageSearch {
     this.index.addAll(chunks.map((chunk, id) => ({ ...chunk, id })));
   }
 
-  /** How many chunks the index holds. */
-  get size(): number {
-    return this.index.documentCount;
-  }
-
   /**
-   * The chunks that best match `question`, best first, as passages.
-   * Expired Directives are included: the chatbot flags their Citations
-   * instead of hiding them. `today` decides which are In force.
+   * The chunks that match `question`, best first, as passages. The chatbot
+   * keeps the top 5 (MAX_PASSAGES in libs/llm). Expired Directives are
+   * included: the chatbot flags their Citations instead of hiding them.
+   * `today` decides which are In force.
    */
-  search(
-    question: string,
-    options: { today: string; limit?: number },
-  ): Passage[] {
-    const { today, limit = DEFAULT_PASSAGE_LIMIT } = options;
-    return this.index
-      .search(question)
-      .slice(0, limit)
-      .map((hit) => {
-        const chunk = this.chunks[hit.id];
-        return {
-          code: chunk.code,
-          title: chunk.title,
-          inForce: isInForce(chunk.validFrom, chunk.validTo, today),
-          text: chunk.text,
-        };
-      });
+  search(question: string, today: string): Passage[] {
+    return this.index.search(question).map((hit) => {
+      const chunk = this.chunks[hit.id];
+      return {
+        code: chunk.code,
+        title: chunk.title,
+        inForce: isInForce(chunk.validFrom, chunk.validTo, today),
+        text: chunk.text,
+      };
+    });
   }
 }

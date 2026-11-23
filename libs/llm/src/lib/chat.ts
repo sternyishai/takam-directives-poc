@@ -182,7 +182,12 @@ export async function answerQuestion(
     error: null,
   });
 
-  const found = state.attempts > 0 && state.error === null;
+  // An answer that says it found nothing is not found, even with a valid
+  // Citation in it ("לא מצאתי תשובה בהוראות [1]").
+  const found =
+    state.attempts > 0 &&
+    state.error === null &&
+    !state.draft.includes(NO_ANSWER);
   if (!found) return { answer: NO_ANSWER, citations: [], found: false };
   return {
     answer: state.draft,

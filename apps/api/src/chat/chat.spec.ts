@@ -116,6 +116,16 @@ describe('POST /api/chat', () => {
     );
   });
 
+  it('measures the question after trimming the spaces around it', async () => {
+    app = await startApi(folder, fakeChatModel(['יום הבראה הוא 511.6 ₪ [1].']));
+    const padded =
+      ' '.repeat(300) + 'מה התעריף לקצובת הבראה?' + ' '.repeat(300);
+
+    const response = await ask(app, { question: padded });
+
+    expect(response.status).toBe(200);
+  });
+
   it('answers "no answer" when no chunk matches the question', async () => {
     app = await startApi(folder, fakeChatModel(['תשובה [1].']));
 
