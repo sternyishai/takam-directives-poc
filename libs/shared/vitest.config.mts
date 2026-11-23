@@ -5,7 +5,6 @@ export default defineConfig(() => ({
   cacheDir: '../../node_modules/.vite/libs/shared',
   test: {
     name: 'shared',
-    passWithNoTests: true, // types only, nothing to run yet
     watch: false,
     globals: true,
     environment: 'node',

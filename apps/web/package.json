@@ -6,6 +6,7 @@
     "name": "web"
   },
   "dependencies": {
-    "@takam/shared": "*"
+    "@takam/shared": "*",
+    "react-router": "^8.5.2"
   }
 }

@@ -1,6 +1,16 @@
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import type { HealthReport } from '@takam/shared';
 import App from './app';
+
+/** Opens the app at its home page, "/". */
+function openHome() {
+  render(
+    <MemoryRouter initialEntries={['/']}>
+      <App />
+    </MemoryRouter>,
+  );
+}
 
 /** Stands in for the API: every fetch answers with this health report. */
 function stubHealth(report: HealthReport) {
@@ -10,7 +20,7 @@ function stubHealth(report: HealthReport) {
   );
 }
 
-describe('App', () => {
+describe('The home page (/)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -18,7 +28,7 @@ describe('App', () => {
   it('shows the number of directives the API reports, in Hebrew', async () => {
     stubHealth({ directives: 30, indexSize: 30, lastIngest: null });
 
-    render(<App />);
+    openHome();
 
     expect(await screen.findByText('במאגר 30 הוראות')).toBeTruthy();
     expect(fetch).toHaveBeenCalledWith('/api/health');
@@ -32,7 +42,7 @@ describe('App', () => {
       }),
     );
 
-    render(<App />);
+    openHome();
 
     expect(await screen.findByText('השרת אינו זמין')).toBeTruthy();
   });
@@ -46,7 +56,7 @@ describe('App', () => {
       ),
     );
 
-    render(<App />);
+    openHome();
 
     expect(await screen.findByText('השרת אינו זמין')).toBeTruthy();
   });

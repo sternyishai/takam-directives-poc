@@ -1,31 +1,17 @@
-import { useEffect, useState } from 'react';
-import type { HealthReport } from '@takam/shared';
+import { Route, Routes } from 'react-router';
+import { DirectivePage } from './directive-page';
+import { HomePage } from './home-page';
 
+/**
+ * The pages, by URL. The router itself (BrowserRouter) is added in main.tsx,
+ * so tests can wrap App in a MemoryRouter at any URL instead.
+ */
 export function App() {
-  // null while we wait for the API; set once it answers.
-  const [health, setHealth] = useState<HealthReport | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  // Runs once, after the first render: ask the API how many directives it has.
-  useEffect(() => {
-    fetch('/api/health')
-      .then((response) => {
-        if (!response.ok) throw new Error(`API answered ${response.status}`);
-        return response.json() as Promise<HealthReport>;
-      })
-      .then(setHealth)
-      .catch(() => setFailed(true));
-  }, []);
-
-  let status = 'טוען…'; // "Loading…"
-  if (failed) status = 'השרת אינו זמין'; // "The server is unavailable"
-  if (health) status = `במאגר ${health.directives} הוראות`; // "N directives in the store"
-
   return (
-    <main>
-      <h1>הוראות תכ"ם</h1>
-      <p>{status}</p>
-    </main>
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/directive/:code" element={<DirectivePage />} />
+    </Routes>
   );
 }
 

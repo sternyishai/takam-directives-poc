@@ -3,6 +3,12 @@ Take-home assignment POC for the Takam Directives site. See docs/assignment.md f
 The author is learning React and must be able to explain every line, so keep code simple and readable and record decisions in the README.
 Status: grilling done (2026-11-23). Build from docs/plan.md, milestone by milestone. Domain terms are in GLOSSARY.md and decisions are in docs/adr/. After everything else is finished, write Hebrew versions of the ADRs (docs/adr/he/).
 
+## Git workflow
+Every issue is built on its own branch, never committed directly to `main`. This rule overrides any skill that says to commit to the current branch.
+1. Before the first commit, create the branch from an up-to-date `main` and name it after the issue, e.g. `issue-3-one-directive`.
+2. When the work is done, push the branch and open a PR whose body says `Closes #N`.
+3. Merge the PR, then make sure the issue is closed.
+
 ## Agent skills
 
 ### Issue tracker

@@ -1,0 +1,110 @@
+import { useEffect, useState } from 'react';
+import { useParams } from 'react-router';
+import type { Directive, DirectiveType } from '@takam/shared';
+
+/** The Hebrew label for each Directive type. */
+const TYPE_LABELS: Record<DirectiveType, string> = {
+  Instruction: 'הוראה',
+  'Temporary Instruction': 'הוראת שעה',
+  Message: 'הודעה',
+};
+
+/** "2026-01-11" → "11/01/2026", the way dates are written in Israel. */
+function formatDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-');
+  return `${day}/${month}/${year}`;
+}
+
+/** What the page is showing: one of four situations. */
+type PageState =
+  | { status: 'loading' }
+  | { status: 'notFound' }
+  | { status: 'failed' }
+  | { status: 'loaded'; directive: Directive };
+
+/** /directive/:code: one Directive, its details and its text. */
+export function DirectivePage() {
+  // The code comes from the URL, e.g. "H.13.10.1" for /directive/H.13.10.1.
+  const { code = '' } = useParams();
+  const [state, setState] = useState<PageState>({ status: 'loading' });
+
+  // Runs after the first render, and again whenever the code in the URL changes.
+  useEffect(() => {
+    // If the user moves to another Directive before this answer arrives, the
+    // cleanup below sets `ignore`, so the late answer does not overwrite the page.
+    let ignore = false;
+    setState({ status: 'loading' });
+
+    fetch(`/api/directives/${encodeURIComponent(code)}`)
+      .then(async (response) => {
+        if (ignore) return;
+        if (response.status === 404) {
+          setState({ status: 'notFound' });
+        } else if (!response.ok) {
+          setState({ status: 'failed' });
+        } else {
+          const directive = (await response.json()) as Directive;
+          if (!ignore) setState({ status: 'loaded', directive });
+        }
+      })
+      .catch(() => {
+        if (!ignore) setState({ status: 'failed' });
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [code]);
+
+  if (state.status === 'loading') return <p>טוען…</p>; // "Loading…"
+  if (state.status === 'notFound') return <p>לא נמצאה הוראה בקוד {code}</p>; // "No Directive with code …"
+  if (state.status === 'failed') return <p>השרת אינו זמין</p>; // "The server is unavailable"
+
+  const { directive } = state;
+  return (
+    <article>
+      <p className="directive-code">
+        <span>{directive.code}</span> ·{' '}
+        <span>{TYPE_LABELS[directive.type]}</span>
+      </p>
+      <h1>{directive.title}</h1>
+
+      {/* role="alert" makes screen readers announce the banner. */}
+      {!directive.inForce && (
+        <p role="alert" className="expired-banner">
+          הוראה זו אינה בתוקף
+        </p>
+      )}
+
+      <p>{directive.chapterPath.join(' › ')}</p>
+
+      <dl className="directive-details">
+        <dt>מהדורה</dt>
+        <dd>{directive.edition}</dd>
+        <dt>בתוקף מתאריך</dt>
+        <dd>{directive.validFrom ? formatDate(directive.validFrom) : '—'}</dd>
+        <dt>בתוקף עד תאריך</dt>
+        <dd>
+          {directive.validTo ? formatDate(directive.validTo) : 'ללא תאריך סיום'}
+        </dd>
+      </dl>
+
+      <p>
+        <a href={directive.officialUrl} target="_blank" rel="noreferrer">
+          המקור באתר תכ"ם
+        </a>
+      </p>
+
+      {/*
+        The HTML was converted by ingest from the Directive's Word file. React
+        escapes text by default, so inserting HTML needs this explicit prop.
+        For now Mammoth's output goes in as is; issue #4 adds a sanitizer
+        (an allowlist of tags) in ingest and a strict CSP header in the API.
+      */}
+      <div
+        className="directive-text"
+        dangerouslySetInnerHTML={{ __html: directive.html }}
+      />
+    </article>
+  );
+}

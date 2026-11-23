@@ -6,6 +6,7 @@
     "web": "nx serve web",
     "api": "nx serve api",
     "dev": "nx run-many -t serve -p api web",
+    "ingest": "tsx apps/ingest/src/main.ts",
     "lint": "nx run-many -t lint",
     "typecheck": "nx run-many -t typecheck",
     "test": "nx run-many -t test",
