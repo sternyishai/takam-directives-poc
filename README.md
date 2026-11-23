@@ -29,6 +29,7 @@ With an empty store it says "במאגר 0 הוראות". You can also run one si
 | `npm run api` | the NestJS API (port 3000, or `PORT`) |
 | `npm run ingest -- <codes…>` | downloads, checks and converts the given Directives into the store |
 | `npm run lint` | ESLint on every project |
+| `npm run format:check` | Prettier: fails if any code file is not formatted (`npm run format` fixes them) |
 | `npm run typecheck` | TypeScript on every project |
 | `npm test` | every test project (Vitest for the libs, web and ingest; Jest for the API) |
 | `npm run build` | builds every project |
@@ -93,8 +94,25 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
 - **`indexSize` is 0 for now.** The MiniSearch index is built in milestone 4.
 - **Vitest runs once, not in watch mode** (`testMode: "run"` in `nx.json`), so `npm test` finishes.
 
-### Tests
-_TBD (milestone 8)_
+### Tests and CI
+`npm test` runs every test project:
+- **Unit tests (Vitest):**
+  - `isInForce` and the other `libs/*` code
+  - the ingest security gate
+  - the web pages, rendered for real with only `fetch` faked
+- **Integration tests (Jest, `apps/api`):** each one starts the whole Nest app on a random port, on an in-memory or temporary SQLite file, and calls it with `fetch`.
+
+No test needs the network or an API key.
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every pull request and on every push to `main`. It installs with `npm ci` on Node 24, then runs these steps in order, and stops at the first one that fails:
+1. `npm run format:check`
+2. `npm run lint`
+3. `npm run typecheck`
+4. `npm test`
+5. `npm run build`
+
+Run the same commands locally before pushing.
+Prettier checks code and config only. The Markdown docs are hand-written and kept as written (`.prettierignore`).
 
 ## Part C: Engineering thinking and production readiness
 1. Engineering decisions and quality: _TBD_
