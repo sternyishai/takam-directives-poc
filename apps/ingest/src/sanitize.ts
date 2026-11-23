@@ -1,13 +1,7 @@
 import sanitizeHtml from 'sanitize-html';
 
-/**
- * Cleans Mammoth's HTML before it is stored, because the viewer inserts it
- * into the page as is (`dangerouslySetInnerHTML`). It is an allowlist: any tag
- * or attribute not named here is removed. A removed tag keeps its text, except
- * <script> and <style>, which are dropped with their content.
- * No `style` or `on…` attribute (like `onerror`) is on the list, so none survive.
- */
-const OPTIONS: sanitizeHtml.IOptions = {
+/** The only tags and attributes a Directive's HTML may keep. */
+const ALLOWLIST: sanitizeHtml.IOptions = {
   allowedTags: [
     'h2',
     'h3',
@@ -33,6 +27,9 @@ const OPTIONS: sanitizeHtml.IOptions = {
     td: ['colspan', 'rowspan'],
     th: ['colspan', 'rowspan'],
   },
+  // A second safety net under the rule below: a link whose address starts
+  // with any other scheme (like `javascript:`) loses its href.
+  allowedSchemes: ['http', 'https'],
   transformTags: {
     // Only links to http(s) addresses stay links. Any other link (a
     // `javascript:` link, or a link inside the Word file such as
@@ -45,6 +42,13 @@ const OPTIONS: sanitizeHtml.IOptions = {
   },
 };
 
+/**
+ * Cleans Mammoth's HTML before it is stored, because the viewer inserts it
+ * into the page as is (`dangerouslySetInnerHTML`). Any tag or attribute not on
+ * the allowlist above is removed. A removed tag keeps its text, except
+ * <script> and <style>, which are dropped with their content.
+ * No `style` or `on…` attribute (like `onerror`) is on the list, so none survive.
+ */
 export function sanitizeDirectiveHtml(html: string): string {
-  return sanitizeHtml(html, OPTIONS);
+  return sanitizeHtml(html, ALLOWLIST);
 }

@@ -84,19 +84,15 @@ describe('GET /api/directives/:code', () => {
     expect(response.status).toBe(404);
   });
 
-  it('sends a strict Content-Security-Policy header', async () => {
-    const response = await fetch(`${baseUrl}/api/directives/H.13.10.1`);
+  // The header must be on every response, so check a found code and an error.
+  it.each(['H.13.10.1', 'H.99.99.99'])(
+    'sends a strict Content-Security-Policy header (%s)',
+    async (code) => {
+      const response = await fetch(`${baseUrl}/api/directives/${code}`);
 
-    expect(response.headers.get('content-security-policy')).toBe(
-      "default-src 'none'; frame-ancestors 'none'",
-    );
-  });
-
-  it('sends the Content-Security-Policy header on an error too', async () => {
-    const response = await fetch(`${baseUrl}/api/directives/H.99.99.99`);
-
-    expect(response.headers.get('content-security-policy')).toBe(
-      "default-src 'none'; frame-ancestors 'none'",
-    );
-  });
+      expect(response.headers.get('content-security-policy')).toBe(
+        "default-src 'none'; frame-ancestors 'none'",
+      );
+    },
+  );
 });
