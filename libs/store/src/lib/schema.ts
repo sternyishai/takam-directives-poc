@@ -1,7 +1,7 @@
 /**
  * The SQLite schema (see docs/adr/0003). `IF NOT EXISTS` makes it safe to run
  * on every start: an empty file gets the tables, an existing one is untouched.
- * Later milestones add tables (chunks). A column added to a table here does
+ * A column added to a table here does
  * not reach a store that already has the table: re-run ingest to get it.
  */
 export const SCHEMA = `
@@ -20,6 +20,15 @@ export const SCHEMA = `
     keywords         TEXT,          -- JSON array of strings
     questions        TEXT,          -- JSON array of strings
     enrichment_error TEXT
+  );
+
+  -- The Directives' text in chunks, for the chatbot's retrieval. Each chunk
+  -- starts with its context line, "code · title › section".
+  CREATE TABLE IF NOT EXISTS chunks (
+    code     TEXT NOT NULL REFERENCES directives (code),
+    position INTEGER NOT NULL,      -- 0 for the Directive's first chunk, then 1, 2…
+    text     TEXT NOT NULL,
+    PRIMARY KEY (code, position)
   );
 
   CREATE TABLE IF NOT EXISTS ingest_runs (

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { HealthReport } from '@takam/shared';
+import { ChatPanel } from './chat-panel';
 import { Search } from './search';
 
 export function HomePage() {
@@ -25,8 +26,14 @@ export function HomePage() {
   return (
     <main>
       <h1>הוראות תכ"ם</h1>
-      <Search />
-      <p className="store-status">{status}</p>
+      {/* Search on one side, the chat panel on the other (styles.css). */}
+      <div className="home-layout">
+        <div>
+          <Search />
+          <p className="store-status">{status}</p>
+        </div>
+        <ChatPanel />
+      </div>
     </main>
   );
 }

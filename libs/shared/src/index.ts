@@ -1,3 +1,4 @@
+export type { ChatAnswer, Citation, Passage } from './lib/chat.js';
 export type { HealthReport } from './lib/health.js';
 export type { Directive, DirectiveType, Enrichment } from './lib/directive.js';
 export type { SearchResult } from './lib/search-result.js';

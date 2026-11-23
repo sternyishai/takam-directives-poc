@@ -1,4 +1,4 @@
-// One ingest run: fetch → security gate → convert → enrich → a new store.
+// One ingest run: fetch → security gate → convert → chunk → enrich → a new store.
 // main.ts reads the config and calls runIngest with the real site; the tests
 // call it with a fake one, and with LangChain's fake chat model.
 
@@ -8,6 +8,7 @@ import { DIRECTIVE_TYPES, type DirectiveType } from '@takam/shared';
 import { Store } from '@takam/store';
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { chunkDirective } from './chunk';
 import { convertToHtml } from './convert';
 import { checkFile } from './gate';
 import {
@@ -180,5 +181,7 @@ async function ingestDirective(
     enrichment: enrichment.ok ? enrichment.enrichment : null,
     enrichmentError: enrichment.ok ? null : enrichment.error,
   });
+  // The chatbot answers from these (chunk.ts).
+  store.saveChunks(code, chunkDirective({ code, title: document.name, html }));
   return enrichment.ok;
 }

@@ -6,7 +6,6 @@
 // The ingest CLI: `npm run ingest`. It ingests every Document code listed in
 // apps/ingest/ingest.config.json into a new store (ingest.ts has the steps).
 // It needs GOOGLE_API_KEY and LLM_MODEL for enrichment, read from .env.
-// Chunking and embeddings come in later milestones (docs/plan.md).
 
 import { chatModelFromEnv } from '@takam/llm';
 import { DEFAULT_DB_PATH } from '@takam/store';

@@ -41,5 +41,13 @@ What the LLM writes about each Directive at ingest, in Hebrew: a summary, keywor
 _Avoid_: Metadata (the site's own fields), tags
 
 **Citation** (הפניה):
-A numbered reference `[n]` in a chatbot answer that points to a Directive the answer was drawn from.
+A numbered reference `[n]` in a chatbot answer that points to the Passage the answer was drawn from, and through it to its Directive. Our code checks every one.
 _Avoid_: Source, footnote, reference
+
+**Chunk** (קטע):
+A piece of a Directive's text, made at ingest for the chatbot: one section (a heading and its paragraphs) or a part of a long one, starting with the context line `code · title › section`.
+_Avoid_: Segment, block
+
+**Passage** (קטע ממוספר):
+A Chunk that retrieval chose for one question, numbered from 1 for the model. A Citation `[n]` points to passage n.
+_Avoid_: Context, document

@@ -74,7 +74,8 @@
     "@takam/shared": "*",
     "@takam/store": "*",
     "@takam/sanitize": "*",
-    "@takam/search": "*"
+    "@takam/search": "*",
+    "@takam/llm": "*"
   },
   "devDependencies": {
     "@nestjs/testing": "^11.0.0"

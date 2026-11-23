@@ -23,16 +23,19 @@
   ],
   "references": [
     {
-      "path": "../../libs/store/tsconfig.lib.json"
+      "path": "../../libs/llm/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/search/tsconfig.lib.json"
     },
     {
       "path": "../../libs/sanitize/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/shared/tsconfig.lib.json"
+      "path": "../../libs/store/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/search/tsconfig.lib.json"
+      "path": "../../libs/shared/tsconfig.lib.json"
     }
   ]
 }
