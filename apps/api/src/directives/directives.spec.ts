@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AppModule } from '../app/app.module';
+import { configureApp } from '../app/configure-app';
 
 /** Two Directives: one with no end date, one that ended in 2020. */
 const travel: StoredDirective = {
@@ -16,7 +17,8 @@ const travel: StoredDirective = {
   edition: 15,
   validFrom: '2026-01-11',
   validTo: null,
-  html: '<p>נוהל הזמנת טיסה</p>',
+  // HTML as ingest stores it: converted and already sanitized.
+  html: '<h2>מבוא</h2><p>נוהל הזמנת טיסה</p>',
 };
 const expired: StoredDirective = {
   ...travel,
@@ -47,7 +49,7 @@ describe('GET /api/directives/:code', () => {
       imports: [AppModule],
     }).compile();
     app = moduleRef.createNestApplication();
-    app.setGlobalPrefix('api');
+    configureApp(app);
     await app.listen(0); // port 0: let the OS pick a free port
     baseUrl = await app.getUrl();
   });
@@ -80,5 +82,21 @@ describe('GET /api/directives/:code', () => {
     const response = await fetch(`${baseUrl}/api/directives/H.99.99.99`);
 
     expect(response.status).toBe(404);
+  });
+
+  it('sends a strict Content-Security-Policy header', async () => {
+    const response = await fetch(`${baseUrl}/api/directives/H.13.10.1`);
+
+    expect(response.headers.get('content-security-policy')).toBe(
+      "default-src 'none'; frame-ancestors 'none'",
+    );
+  });
+
+  it('sends the Content-Security-Policy header on an error too', async () => {
+    const response = await fetch(`${baseUrl}/api/directives/H.99.99.99`);
+
+    expect(response.headers.get('content-security-policy')).toBe(
+      "default-src 'none'; frame-ancestors 'none'",
+    );
   });
 });

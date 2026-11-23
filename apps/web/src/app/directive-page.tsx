@@ -98,8 +98,8 @@ export function DirectivePage() {
       {/*
         The HTML was converted by ingest from the Directive's Word file. React
         escapes text by default, so inserting HTML needs this explicit prop.
-        For now Mammoth's output goes in as is; issue #4 adds a sanitizer
-        (an allowlist of tags) in ingest and a strict CSP header in the API.
+        Ingest has already passed it through a sanitizer (an allowlist of
+        tags, with no scripts, `on…` attributes or `javascript:` links).
       */}
       <div
         className="directive-text"
