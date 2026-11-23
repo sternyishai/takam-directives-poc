@@ -84,5 +84,10 @@
       }
     }
   },
-  "dependencies": {}
+  "dependencies": {
+    "jszip": "^3.10.2",
+    "mammoth": "^1.13.0",
+    "@takam/shared": "*",
+    "@takam/store": "*"
+  }
 }

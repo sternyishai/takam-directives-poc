@@ -10,9 +10,10 @@ export default defineConfig(() => ({
     port: 4200,
     host: 'localhost',
     // In development, send /api calls to the NestJS API so the page and the
-    // API share one origin (no CORS setup needed).
+    // API share one origin (no CORS setup needed). Set API_URL if the API
+    // runs somewhere else, e.g. API_URL=http://localhost:3456 with PORT=3456.
     proxy: {
-      '/api': 'http://localhost:3000',
+      '/api': process.env.API_URL ?? 'http://localhost:3000',
     },
   },
   preview: {

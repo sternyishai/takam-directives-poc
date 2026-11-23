@@ -20,6 +20,9 @@
     },
     {
       "path": "./libs/shared"
+    },
+    {
+      "path": "./libs/store"
     }
   ],
   "compilerOptions": {}
