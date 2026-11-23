@@ -1,0 +1,3 @@
+# LangChain.js models as the vendor-neutral seam; LangGraph for the chat flow
+
+The handoff planned a hand-written `LlmClient` interface with one adapter per provider. We use LangChain.js instead: `BaseChatModel` and `Embeddings` already are that interface, Gemini is one class (`ChatGoogleGenerativeAI`), tests use LangChain's fake chat model, and enrichment uses `withStructuredOutput(zod)`. The chatbot is a small LangGraph (retrieve → generate → checkCitations, with one conditional retry) because the citation check needs a branch, not just a chain. We still do not use any provider's built-in citation feature: citations are checked in our code, so switching vendors does not change answer safety.

@@ -1,0 +1,3 @@
+# One SQLite file is the only store, and it is committed
+
+Ingest writes everything (metadata, enrichment, converted HTML, chunks with embeddings, plus a search log table) into `data/takam.db` via Node's built-in `node:sqlite`. The file is committed so a reviewer can run search, the viewer and the tests without any API key or network. We rejected a JSON-plus-SQLite split (two stores to keep in sync) and a vector database (about 200 chunks; cosine similarity in plain TypeScript is enough). The search index (MiniSearch) is rebuilt in memory from SQLite at API startup. Production would move to Postgres with pgvector (see README, Part C).
