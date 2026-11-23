@@ -8,9 +8,8 @@ export default defineConfig(() => ({
     watch: false,
     globals: true,
     environment: 'node',
-    // Enrichment is tested where ingest uses it (apps/ingest/src/ingest.spec.ts,
-    // with the fake model), so this lib has no tests of its own yet.
-    passWithNoTests: true,
+    // Enrichment is tested where ingest uses it (apps/ingest/src/ingest.spec.ts),
+    // and the chat here, both with the fake model.
     include: ['{src,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     reporters: ['default'],
     coverage: {

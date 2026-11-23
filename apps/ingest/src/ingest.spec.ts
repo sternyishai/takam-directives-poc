@@ -22,16 +22,20 @@ function documentWith(code: string): SiteDocument {
   };
 }
 
+/** One paragraph of a Word file: its style, and its text. */
+type Paragraph = { style: string; text: string };
+
 /**
- * A fake Takam site holding one Instruction per code. Downloading a code in
- * `htmlInsteadOf` gives the site's HTML page instead of a Word file, which
- * the gate rejects.
+ * A fake Takam site holding one Instruction per code, each a Word file with
+ * `paragraphs`. Downloading a code in `htmlInsteadOf` gives the site's HTML
+ * page instead of a Word file, which the gate rejects.
  */
 async function fakeSite(
   codes: string[],
   htmlInsteadOf: string[] = [],
+  paragraphs: Paragraph[] = [{ style: 'Normal', text: 'טקסט' }],
 ): Promise<TakamSite> {
-  const wordFile = await wordFileWith([{ style: 'Normal', text: 'טקסט' }]);
+  const wordFile = await wordFileWith(paragraphs);
   const htmlPage = new TextEncoder().encode('<!DOCTYPE html><html>');
   return {
     fetchDocumentList: async () => codes.map(documentWith),
@@ -233,6 +237,85 @@ describe('runIngest', () => {
       const store = new Store(dbPath);
       expect(store.findDirective('H.13.1.1')?.enrichment).not.toBeNull();
       store.close();
+    });
+  });
+
+  describe('chunks', () => {
+    /** A paragraph of about 500 characters: two fit in a chunk, three don't. */
+    const long = (word: string) => Array(100).fill(word).join(' ');
+
+    /** Ingests one Directive with these paragraphs, and returns its chunks' text. */
+    async function chunksOf(paragraphs: Paragraph[]): Promise<string[]> {
+      const codes = ['H.13.3.1'];
+      await runIngest(
+        codes,
+        dbPath,
+        await fakeSite(codes, [], paragraphs),
+        alwaysValid(),
+      );
+      const store = new Store(dbPath);
+      const chunks = store.listChunks();
+      store.close();
+      return chunks.map((chunk) => {
+        expect(chunk.code).toBe('H.13.3.1');
+        return chunk.text;
+      });
+    }
+
+    it('splits at the headings, and starts each chunk with its context line', async () => {
+      const chunks = await chunksOf([
+        { style: 'Normal', text: 'פתיחה' },
+        { style: 'heading 1', text: 'מבוא' },
+        { style: 'Normal', text: 'ההוראה חלה על כל העובדים' },
+        { style: 'Normal', text: 'ועל הגמלאים' },
+        { style: 'heading 2', text: 'תעריפים' },
+        { style: 'Normal', text: 'ערך יום הבראה' },
+      ]);
+
+      // The text before the first heading has no section in its context line.
+      // No paragraph is repeated: these sections were not split by size.
+      expect(chunks).toEqual([
+        'H.13.3.1 · הוראה H.13.3.1\nפתיחה',
+        'H.13.3.1 · הוראה H.13.3.1 › מבוא\nההוראה חלה על כל העובדים\nועל הגמלאים',
+        'H.13.3.1 · הוראה H.13.3.1 › תעריפים\nערך יום הבראה',
+      ]);
+    });
+
+    it('splits a section longer than about 1,200 characters at paragraphs, with one paragraph of overlap', async () => {
+      const [a, b, c] = [long('אלף'), long('בית'), long('גימל')];
+
+      const chunks = await chunksOf([
+        { style: 'heading 1', text: 'מבוא' },
+        { style: 'Normal', text: 'קצר' },
+        { style: 'heading 1', text: 'תעריפים' },
+        { style: 'Normal', text: a },
+        { style: 'Normal', text: b },
+        { style: 'Normal', text: c },
+      ]);
+
+      // b, the last paragraph of the first chunk of "תעריפים", starts the
+      // second. The short section before it shares nothing with it.
+      expect(chunks).toEqual([
+        'H.13.3.1 · הוראה H.13.3.1 › מבוא\nקצר',
+        `H.13.3.1 · הוראה H.13.3.1 › תעריפים\n${a}\n${b}`,
+        `H.13.3.1 · הוראה H.13.3.1 › תעריפים\n${b}\n${c}`,
+      ]);
+    });
+
+    it('keeps a paragraph longer than the limit whole, in a chunk of its own, with no overlap', async () => {
+      const huge = long('אלף') + ' ' + long('בית') + ' ' + long('גימל');
+
+      const chunks = await chunksOf([
+        { style: 'heading 1', text: 'נספח' },
+        { style: 'Normal', text: 'קצר' },
+        { style: 'Normal', text: huge },
+      ]);
+
+      // An overlap would push the chunk even further past the limit.
+      expect(chunks).toEqual([
+        'H.13.3.1 · הוראה H.13.3.1 › נספח\nקצר',
+        `H.13.3.1 · הוראה H.13.3.1 › נספח\n${huge}`,
+      ]);
     });
   });
 });

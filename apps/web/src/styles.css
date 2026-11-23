@@ -1,7 +1,7 @@
 /* Global styles. The page direction (rtl) and language (he) are set on <html> in index.html. */
 body {
   margin: 0 auto;
-  max-width: 60rem;
+  max-width: 80rem;
   padding: 1rem;
   font-family: Arial, 'Noto Sans Hebrew', sans-serif;
 }
@@ -136,4 +136,51 @@ body {
 .store-status {
   color: #555;
   font-size: 0.9rem;
+}
+
+/* The home page: the search, and the chat panel beside it (below it on a narrow screen). */
+.home-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22rem;
+  gap: 2rem;
+  align-items: start;
+}
+@media (max-width: 50rem) {
+  .home-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.chat-panel {
+  padding: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fafafa;
+}
+.chat-panel h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+.chat-panel textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.5rem;
+  font: inherit;
+}
+.chat-answer {
+  line-height: 1.6;
+}
+/* Keep the answer's line breaks: the model writes one point per line. */
+.chat-answer > p:first-child {
+  white-space: pre-line;
+}
+.citations {
+  padding-inline-start: 0;
+  list-style: none;
+}
+.citations li {
+  margin-bottom: 0.25rem;
+}
+.chat-unavailable {
+  color: #b00020;
 }

@@ -220,7 +220,7 @@ function QuickResults({
 }
 
 /** Green "בתוקף" (in force) or red "לא בתוקף" (not in force). */
-function InForceBadge({ inForce }: { inForce: boolean }) {
+export function InForceBadge({ inForce }: { inForce: boolean }) {
   return inForce ? (
     <span className="badge in-force-badge">בתוקף</span>
   ) : (

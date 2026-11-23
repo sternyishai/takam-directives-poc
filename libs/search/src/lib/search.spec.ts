@@ -274,6 +274,17 @@ describe('DirectiveSearch', () => {
       expect(codesFor('בת')).toEqual([]);
     });
 
+    it('matches a final letter as its regular form: "תעריף" is the same word as "תעריפי", not a typo', () => {
+      const scores = (query: string) =>
+        index
+          .search(query, { today: TODAY, inForce: false })
+          .map((result) => [result.code, result.score]);
+
+      // ף at the end of a word is פ inside one. A typo match would score less.
+      expect(scores('תעריף')).toEqual(scores('תעריפי'));
+      expect(scores('תעריף')).not.toEqual([]);
+    });
+
     it.each(['אש"ל', 'אשל', 'אש״ל'])(
       'matches an abbreviation however its quote is typed ("%s")',
       (query) => {

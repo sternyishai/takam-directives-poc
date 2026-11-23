@@ -17,9 +17,10 @@
     "name": "llm"
   },
   "dependencies": {
-    "@takam/shared": "*",
     "@langchain/core": "^1.5.0",
     "@langchain/google-genai": "^2.3.7",
+    "@langchain/langgraph": "^1.7.5",
+    "@takam/shared": "*",
     "zod": "^4.6.7"
   }
 }

@@ -27,7 +27,7 @@ With an empty store it says "במאגר 0 הוראות". You can also run one si
 |---|---|
 | `npm run web` | the web app (Vite dev server, port 4200; `/api` is proxied to port 3000) |
 | `npm run api` | the NestJS API (port 3000, or `PORT`) |
-| `npm run ingest` | downloads, checks, converts and enriches the 30 Directives in `apps/ingest/ingest.config.json` into a new store (needs `GOOGLE_API_KEY`) |
+| `npm run ingest` | downloads, checks, converts, chunks and enriches the 30 Directives in `apps/ingest/ingest.config.json` into a new store (needs `GOOGLE_API_KEY`) |
 | `npm run export` | writes each Directive in the store, enrichment included, to `data/export/<code>.json`, to read without SQLite |
 | `npm run lint` | ESLint on every project |
 | `npm run format:check` | Prettier: fails if any code file is not formatted (`npm run format` fixes them) |
@@ -54,6 +54,14 @@ Only In-force Directives are shown until you tick "הצג גם הוראות שא
 While you type, a dropdown under the box shows the top 3 matches, each with its Document code, title and a green "בתוקף" (in force) or red "לא בתוקף" badge. The arrow keys move the selection, Enter opens the selected Directive, and Escape closes the dropdown. Clicking an entry opens it too. Enter with nothing selected, or the "חיפוש" button, shows the full results.
 The API is `GET /api/search?q=…&inForce=true&limit=20`. `inForce` is true unless it is `false`, and `limit` is 1 to 50. Every search adds a row to the `search_log` table: the query, the filter, the number of results and the time.
 
+### Ask the chatbot
+```bash
+npm run dev        # needs GOOGLE_API_KEY and LLM_MODEL in .env
+```
+Open http://localhost:4200 and type a question in the "שאלה על ההוראות" (a question about the Directives) panel beside the search, for example "מה התעריף לקצובת הבראה?" (what is the recuperation pay rate?). The answer cites the passages it used as `[n]`. Under it, each Citation shows the Directive's code and title and links to the viewer, with a red "לא בתוקף" badge if the Directive is Expired. When the Directives don't answer the question, the panel says "לא מצאתי תשובה בהוראות" (I didn't find an answer in the Directives).
+Without a key, or when Gemini fails, the panel says chat is unavailable, and search and the viewer keep working.
+The API is `POST /api/chat` with `{"question": "…"}` (1 to 500 characters). It returns `{answer, citations: [{n, code, title, inForce}], found}`, 400 without a usable question, and 503 when chat is unavailable.
+
 ### Read a Directive
 The store (`data/takam.db`) is committed with the 30 Directives in it, so this needs no network:
 ```bash
@@ -73,7 +81,8 @@ For each code, ingest does the following:
 3. Puts the file through the security gate.
 4. Converts it with Mammoth.
 5. Enriches it: one Gemini call returns a Hebrew summary, keywords and likely questions (see "Enrichment" below).
-6. Writes it to a new store, `data/takam.db.tmp`.
+6. Splits it into chunks for the chatbot (see "Chat" below).
+7. Writes it and its chunks to a new store, `data/takam.db.tmp`.
 
 It prints `✓` or `✗ <reason>` for each code, and a line for each enrichment failure. Then:
 - If at most 20% of the files were rejected and at most 20% of the enrichments failed, it records the time of the run and moves the new store over `data/takam.db`.
@@ -85,11 +94,11 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
 | Project | What it is |
 |---|---|
 | `apps/web` | React + Vite, Hebrew and right-to-left (`<html lang="he" dir="rtl">`) |
-| `apps/api` | NestJS: `GET /api/health`, `GET /api/search` and `GET /api/directives/:code` |
-| `apps/ingest` | Node CLI that fills the store: Takam site client, security gate, Mammoth conversion |
-| `libs/search` | `DirectiveSearch`: MiniSearch over the title, Document code, headings and enrichment, with Hebrew normalization and typo tolerance |
-| `libs/llm` | LangChain chat models (Gemini, and the fake one for tests) and enrichment; chat comes in milestone 7 |
-| `libs/shared` | types shared by the API and the web app (`HealthReport`, `Directive`, `SearchResult`), plus `isInForce`, `todayInIsrael` and `officialPageUrl` |
+| `apps/api` | NestJS: `GET /api/health`, `GET /api/search`, `GET /api/directives/:code` and `POST /api/chat` |
+| `apps/ingest` | Node CLI that fills the store: Takam site client, security gate, Mammoth conversion, chunking |
+| `libs/search` | `DirectiveSearch`: MiniSearch over the title, Document code, headings and enrichment; `PassageSearch`: MiniSearch over the chunks, for the chatbot. Both share the Hebrew normalization and typo tolerance in `words.ts` |
+| `libs/llm` | LangChain chat models (Gemini, and the fake one for tests), enrichment, and the chat LangGraph with its citation check |
+| `libs/shared` | types shared by the API and the web app (`HealthReport`, `Directive`, `SearchResult`, `ChatAnswer`, `Citation`, `Passage`), plus `isInForce`, `todayInIsrael` and `officialPageUrl` |
 | `libs/store` | the SQLite schema and the `Store` class: ingest writes to it, the API reads from it |
 
 ### Decisions made while building
@@ -165,9 +174,22 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
   - **The viewer shows the summary at the top**, under the title, in a box labelled "תקציר" (summary) with the note "נכתב על ידי מודל שפה. הנוסח המחייב הוא נוסח ההוראה." (written by a language model; the Directive's own wording is what binds). There is no box when enrichment failed.
   - **The plan put keywords above headings in the weights; this issue put all of the enrichment below them.** We follow the issue: the headings are the Directive's own text, while the enrichment is the model's reading of it.
   - **What it fixed on the real data:** neither Expired Directive has keywords on the site. Now `עלויות` (costs) finds HZ.13.10.1.1 and `ייעודיות` (dedicated) finds HOD.13.5.1.1. Each word is only in the Directive's summary, not in its title, text, keywords or questions. `apps/api/src/search/committed-store.spec.ts` checks this on the committed store, and also checks that the word stops finding the Directive once its summary is removed. Finding the words took a test, not a text search: a word can look absent but still match after normalization or as a typo (`להתקנה` did).
-  - **`libs/llm` has no tests of its own** (`passWithNoTests` in its Vitest config). Enrichment is tested where ingest uses it, with the fake model, which is the seam the issue named. A second set of tests on the lib would test the same behaviour twice.
+  - **Enrichment is tested where ingest uses it**, with the fake model, which is the seam issue #9 named. A second set of tests on `libs/llm` would test the same behaviour twice. (The chat, below, is tested in `libs/llm`, because that is its seam.)
   - **`data/export/` holds one JSON file per Directive** (`npm run export`), with every stored field and the HTML last, so the enrichment can be shown without opening SQLite. The files are a committed copy for people to read; the app reads only `data/takam.db`. Run the export again after each ingest.
   - **`.env` is read by ingest with Node's own `process.loadEnvFile`**, so there is no dotenv dependency. A variable already set in the shell wins.
+- **Chat** (issue #10). A question goes through a LangGraph of three steps (`libs/llm/src/lib/chat.ts`, ADR 0002): **retrieve** → **generate** → **checkCitations**.
+  - **Chunks are made at ingest** (`apps/ingest/src/chunk.ts`) from the sanitized HTML and stored in a `chunks` table. The HTML is cut before every heading, paragraph, list item and table row. Each piece's text is one paragraph, and a heading (`h2`–`h4`) starts a new section. A section that fits in about 1,200 characters is one chunk. A longer one is cut between paragraphs, never inside one, and each chunk after the first starts with the last paragraph of the one before (one paragraph of overlap), so a clause that leans on the one before it still has it. Sections that are not split share nothing. The overlap is left out when it would push the chunk past the limit, and a paragraph longer than the limit is a chunk of its own. On the real data, the 30 Directives give 376 chunks, with a median of about 1,000 characters and none over 1,300.
+  - **Each chunk starts with a context line**, `code · title › section` (just `code · title` before the first heading). A passage then makes sense on its own to the model, and retrieval also matches the Directive's title and the section's heading.
+  - **Retrieval is keyword search only** (`PassageSearch` in `libs/search`): MiniSearch over the chunks, with the same Hebrew normalization and typo rules as the Directive search, cut to the top 5 passages. The plan also had embedding similarity; this issue asked for keyword retrieval, which needs no second API call per question and no vectors in the store. Expired Directives are included, because the chatbot flags their Citations instead of hiding them.
+  - **The model may answer only from the numbered passages**, and must cite them as `[n]`. The instructions are in Hebrew and ask for plain text, because the panel shows the answer as text (the first real answers came with Markdown `**`). temperature 0, as for enrichment.
+  - **Our code checks every Citation, not the model.** Every `[n]` must be one of the passages given, and at least one must be cited. `[1, 3]` is read as two Citations, so a bad number inside a list is caught too. On a failure, generate runs once more with its first answer and the reason it was rejected. If that fails too, the answer is "לא מצאתי תשובה בהוראות" with `found: false`. When the model itself says it found no answer, there is no retry, and when retrieval finds nothing, the model is not called.
+  - **A Citation is `{n, code, title, inForce}`**, one per passage cited, in number order. `inForce` is computed on the day of the question, like everywhere else (ADR 0001), and the panel puts the red badge on an Expired one.
+  - **The chat model is a Nest provider** (`CHAT_MODEL`). It is Gemini, or `null` when `GOOGLE_API_KEY` or `LLM_MODEL` is missing; then the API still starts, logs that the chatbot is off, and `POST /api/chat` answers 503. A model that throws (quota, network) also gives 503, and the reason is only logged. The tests replace the provider with the fake model. The API now reads `.env` with `process.loadEnvFile`, as ingest does.
+  - **The passage search is built once, when the API starts**, from the store's chunks and their Directives' titles and dates, like the Directive search.
+  - **Final letters are normalized** (`ך ם ן ף ץ` → `כ מ נ פ צ`) in `normalizeWord`, for both searches. Without it, "התעריף" (the rate) matched "תעריפי" (rates of) only as a typo, at 0.2 weight, and the question "מה התעריף לקצובת הבראה?" did not retrieve HOD.13.3.1.1, the Directive with the rates.
+  - **The committed store got its chunks without a new ingest.** Chunks depend only on the stored HTML, so they were written by running `chunkDirective` over the 30 stored Directives. A full ingest would also have called the LLM again and changed the enrichment.
+  - **Checked on the real data:** "מה התעריף לקצובת הבראה?" retrieves only H.13.3.1 and HOD.13.3.1.1 (`apps/api/src/chat/committed-store.spec.ts`), and with the real key Gemini answers 511.6 ₪ a day for 2026, citing HOD.13.3.1.1, whose link opens that Directive in the viewer. One question takes about 6 seconds.
+  - **No streaming and no history**, as the plan says: one question, one answer. The panel notes that the answer was written by a language model and that the Directive's wording is what binds.
 - **Vitest runs once, not in watch mode** (`testMode: "run"` in `nx.json`), so `npm test` finishes.
 
 ### Tests and CI
@@ -179,8 +201,10 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
   - the sanitizer in `libs/sanitize` (`<script>`, `onerror`, `javascript:` links)
   - search (`libs/search`): whole words, the "רכב" trap, code lookup, Hebrew spellings (full/short, prefixes, quotes, niqqud), typos, the in-force default, the inclusive valid-to boundary, a future valid-from, snippets, the limit, an empty query, and the enrichment (both Expired Directives found by a summary word, enrichment ranked below headings)
   - ingest with LangChain's fake chat model: an invalid first reply followed by a valid retry is accepted, two bad replies (one not JSON, one not Hebrew) are stored as an enrichment failure, and more than 20% failures keep the old store
+  - ingest's chunks: the context line, a split at each heading, a long section split between paragraphs with one paragraph of overlap (and none between sections), and a paragraph longer than the limit kept whole
+  - the chat (`libs/llm`) with a scripted fake model: valid Citations, an unknown `[n]` that recovers on the retry, an unknown `[n]` twice (and no Citations twice) giving the "no answer" response, an Expired Citation flagged, at most 5 passages, and no model call when nothing is retrieved
   - the web pages, rendered for real with only `fetch` faked
-- **Integration tests (Jest, `apps/api`):** each one starts the whole Nest app on a random port, on an in-memory or temporary SQLite file, and calls it with `fetch`. They also check the CSP header, that unsafe HTML in the store is sent sanitized, that "רכב" does not put the trap H.1.1.1 first, and that every search writes a row to the search log. One more test reads a copy of the committed store and checks that both Expired Directives are found by a word only their summary has.
+- **Integration tests (Jest, `apps/api`):** each one starts the whole Nest app on a random port, on an in-memory or temporary SQLite file, and calls it with `fetch`. They also check the CSP header, that unsafe HTML in the store is sent sanitized, that "רכב" does not put the trap H.1.1.1 first, and that every search writes a row to the search log. `POST /api/chat` is tested with the fake model in place of Gemini: an answer with an Expired Citation flagged, "no answer" when no chunk matches, 503 with no model (while search still works) and when the model throws, and 400 for a missing, empty or too long question. Two more tests read a copy of the committed store: both Expired Directives are found by a word only their summary has, and the recuperation question retrieves the right two Directives.
 
 No test needs the network or an API key.
 

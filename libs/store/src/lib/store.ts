@@ -29,6 +29,14 @@ export interface StoredDirective {
   enrichmentError: string | null;
 }
 
+/** One chunk of a Directive's text, as the chatbot's retrieval searches it. */
+export interface StoredChunk {
+  /** Document code of the Directive the chunk is from. */
+  code: string;
+  /** The chunk, starting with its context line "code · title › section". */
+  text: string;
+}
+
 /** One row of the search log: what was searched, and how many results it got. */
 export interface SearchLogEntry {
   query: string;
@@ -131,6 +139,24 @@ export class Store {
       .prepare(`SELECT ${DIRECTIVE_COLUMNS} FROM directives ORDER BY code`)
       .all() as DirectiveRow[];
     return rows.map(toStoredDirective);
+  }
+
+  /** Replaces the chunks of the Directive with this code, in their order. */
+  saveChunks(code: string, texts: string[]): void {
+    this.db.prepare('DELETE FROM chunks WHERE code = ?').run(code);
+    const insert = this.db.prepare(
+      'INSERT INTO chunks (code, position, text) VALUES (?, ?, ?)',
+    );
+    texts.forEach((text, position) => insert.run(code, position, text));
+  }
+
+  /** Every chunk in the store, each Directive's in order (the API indexes them all). */
+  listChunks(): StoredChunk[] {
+    // `unknown` first: TypeScript can't see that a row of two text columns
+    // is a StoredChunk, so it refuses the direct cast.
+    return this.db
+      .prepare('SELECT code, text FROM chunks ORDER BY code, position')
+      .all() as unknown as StoredChunk[];
   }
 
   /** How many Directives are in the store. */
