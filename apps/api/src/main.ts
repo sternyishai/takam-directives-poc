@@ -1,10 +1,11 @@
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app/app.module';
+import { configureApp } from './app/configure-app';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.setGlobalPrefix('api'); // every route starts with /api, e.g. /api/health
+  configureApp(app); // the /api prefix and the security header
   const port = process.env.PORT || 3000;
   await app.listen(port);
 

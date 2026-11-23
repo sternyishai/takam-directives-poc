@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../app/app.module';
+import { configureApp } from '../app/configure-app';
 
 describe('GET /api/health', () => {
   let app: INestApplication;
@@ -14,7 +15,7 @@ describe('GET /api/health', () => {
       imports: [AppModule],
     }).compile();
     app = moduleRef.createNestApplication();
-    app.setGlobalPrefix('api');
+    configureApp(app);
     await app.listen(0); // port 0: let the OS pick a free port
     baseUrl = await app.getUrl();
   });

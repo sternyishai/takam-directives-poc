@@ -15,6 +15,12 @@ module.exports = {
   transform: {
     '^.+\\.[tj]s$': ['@swc/jest', swcJestConfig],
   },
+  // Jest skips node_modules when it transforms code. sanitize-html's HTML
+  // parser (htmlparser2) and the packages it uses ship only as ES modules,
+  // which Jest can't load untransformed, so they are the exception.
+  transformIgnorePatterns: [
+    'node_modules/(?!(htmlparser2|entities|domhandler|domutils|dom-serializer|domelementtype)/)',
+  ],
   moduleFileExtensions: ['ts', 'js', 'html'],
   coverageDirectory: 'test-output/jest/coverage',
 };

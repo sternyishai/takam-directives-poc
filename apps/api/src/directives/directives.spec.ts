@@ -6,8 +6,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AppModule } from '../app/app.module';
+import { configureApp } from '../app/configure-app';
 
-/** Two Directives: one with no end date, one that ended in 2020. */
+/**
+ * Three Directives: one with no end date, one that ended in 2020, and one whose
+ * stored HTML is unsafe (as in a store filled before the sanitizer existed).
+ */
 const travel: StoredDirective = {
   code: 'H.13.10.1',
   title: 'טיסות ושירותים נלווים לנסיעות בתפקיד לחוץ לארץ',
@@ -16,7 +20,8 @@ const travel: StoredDirective = {
   edition: 15,
   validFrom: '2026-01-11',
   validTo: null,
-  html: '<p>נוהל הזמנת טיסה</p>',
+  // HTML as ingest stores it: converted and already sanitized.
+  html: '<h2>מבוא</h2><p>נוהל הזמנת טיסה</p>',
 };
 const expired: StoredDirective = {
   ...travel,
@@ -25,6 +30,14 @@ const expired: StoredDirective = {
   type: 'Temporary Instruction',
   validFrom: '2019-01-01',
   validTo: '2020-12-31',
+};
+const unsafe: StoredDirective = {
+  ...travel,
+  code: 'H.13.10.2',
+  html:
+    '<h2>מבוא</h2><script>alert(1)</script>' +
+    '<p onerror="alert(2)">טקסט</p>' +
+    '<p><a href="javascript:alert(3)">לחצו</a></p>',
 };
 
 describe('GET /api/directives/:code', () => {
@@ -41,13 +54,14 @@ describe('GET /api/directives/:code', () => {
     const seed = new Store(process.env.DB_PATH);
     seed.saveDirective(travel);
     seed.saveDirective(expired);
+    seed.saveDirective(unsafe);
     seed.close();
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
     app = moduleRef.createNestApplication();
-    app.setGlobalPrefix('api');
+    configureApp(app);
     await app.listen(0); // port 0: let the OS pick a free port
     baseUrl = await app.getUrl();
   });
@@ -76,9 +90,28 @@ describe('GET /api/directives/:code', () => {
     expect(directive.inForce).toBe(false);
   });
 
+  it('sends only sanitized HTML, even when the stored HTML is unsafe', async () => {
+    const response = await fetch(`${baseUrl}/api/directives/H.13.10.2`);
+
+    const directive = (await response.json()) as Directive;
+    expect(directive.html).toBe('<h2>מבוא</h2><p>טקסט</p><p>לחצו</p>');
+  });
+
   it('answers 404 for an unknown code', async () => {
     const response = await fetch(`${baseUrl}/api/directives/H.99.99.99`);
 
     expect(response.status).toBe(404);
   });
+
+  // The header must be on every response, so check a found code and an error.
+  it.each(['H.13.10.1', 'H.99.99.99'])(
+    'sends a strict Content-Security-Policy header (%s)',
+    async (code) => {
+      const response = await fetch(`${baseUrl}/api/directives/${code}`);
+
+      expect(response.headers.get('content-security-policy')).toBe(
+        "default-src 'none'; frame-ancestors 'none'",
+      );
+    },
+  );
 });

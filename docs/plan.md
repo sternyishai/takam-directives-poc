@@ -50,7 +50,7 @@ data/takam.db   the only store (committed); data/raw/ is gitignored and never se
   - the zip has fewer than 200 entries and expands to under 20 MB
 
   Then:
-  - Mammoth converts it with a Hebrew style map (`כותרת רמה 1` / `heading 1-2` → h2, and so on) and drops images.
+  - Mammoth converts it with a Hebrew style map (`heading 1` / `נספח - כותרת` / `כות_1` → h2, and so on; see the README for the styles found in the real files) and drops images.
   - sanitize-html applies a tag allowlist.
   - The API sends a strict CSP header.
   - Ingest exits non-zero if more than 20% of files are rejected, and the old DB stays live.
