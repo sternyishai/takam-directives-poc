@@ -5,6 +5,10 @@ export type GateResult = { ok: true } | { ok: false; reason: string };
 
 /** Files of this size or more are rejected before we look inside them. */
 const MAX_BYTES = 2 * 1024 * 1024; // 2 MB
+/** A zip with this many entries or more is rejected (the files have about 30). */
+const MAX_ENTRIES = 200;
+/** A zip that expands to this many bytes or more is rejected. */
+const MAX_EXPANDED_BYTES = 20 * 1024 * 1024; // 20 MB
 
 /**
  * The security gate: every downloaded file passes through here before Mammoth
@@ -13,6 +17,9 @@ const MAX_BYTES = 2 * 1024 * 1024; // 2 MB
  *   1. the size is under 2 MB
  *   2. the file starts with the zip magic bytes
  *   3. the zip opens and contains word/document.xml (the text of a Word file)
+ *   4. it is not a zip bomb: it has fewer than 200 entries and expands to
+ *      under 20 MB. A zip bomb is a small zip that expands to gigabytes and
+ *      fills the memory of whatever opens it (here: Mammoth).
  */
 export async function checkFile(file: Uint8Array): Promise<GateResult> {
   if (file.length >= MAX_BYTES) {
@@ -43,7 +50,68 @@ export async function checkFile(file: Uint8Array): Promise<GateResult> {
     };
   }
 
+  if (Object.keys(zip.files).length >= MAX_ENTRIES) {
+    return {
+      ok: false,
+      reason: 'a zip with 200 entries or more, likely a zip bomb',
+    };
+  }
+
+  try {
+    if (await expandsTooMuch(zip)) {
+      return {
+        ok: false,
+        reason: 'a zip that expands to 20 MB or more, likely a zip bomb',
+      };
+    }
+  } catch {
+    return { ok: false, reason: 'a damaged zip file' };
+  }
+
   return { ok: true };
+}
+
+/**
+ * Does the zip expand to MAX_EXPANDED_BYTES or more? Each entry's header
+ * states its expanded size, but a zip bomb can lie there, so we expand the
+ * entries for real and count the bytes. An entry comes out as a stream of
+ * small chunks, and we stop at the limit: the whole zip is never in memory.
+ */
+async function expandsTooMuch(zip: JSZip): Promise<boolean> {
+  let expandedBytes = 0;
+  for (const entry of Object.values(zip.files)) {
+    if (entry.dir) continue; // a folder has no content
+    expandedBytes += await countExpandedBytes(
+      entry,
+      MAX_EXPANDED_BYTES - expandedBytes,
+    );
+    if (expandedBytes >= MAX_EXPANDED_BYTES) return true;
+  }
+  return false;
+}
+
+/**
+ * Expands one entry and counts its bytes, stopping once there are `limit`.
+ * JSZip's stream reports through events: "data" for each chunk, "end" when
+ * the entry is done, "error" if it is damaged.
+ */
+function countExpandedBytes(
+  entry: JSZip.JSZipObject,
+  limit: number,
+): Promise<number> {
+  return new Promise((resolve, reject) => {
+    let bytes = 0;
+    const stream = entry.nodeStream('nodebuffer');
+    stream.on('data', (chunk: Buffer) => {
+      bytes += chunk.length;
+      if (bytes >= limit) {
+        stream.pause(); // stop expanding: we have seen enough
+        resolve(bytes);
+      }
+    });
+    stream.on('end', () => resolve(bytes));
+    stream.on('error', reject);
+  });
 }
 
 /** "PK\x03\x04": the first four bytes of every zip file. */

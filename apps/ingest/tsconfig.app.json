@@ -8,6 +8,7 @@
   },
   "include": ["src/**/*.ts"],
   "exclude": [
+    "src/testing/**",
     "out-tsc",
     "dist",
     "vite.config.ts",

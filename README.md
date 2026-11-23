@@ -27,33 +27,40 @@ With an empty store it says "במאגר 0 הוראות". You can also run one si
 |---|---|
 | `npm run web` | the web app (Vite dev server, port 4200; `/api` is proxied to port 3000) |
 | `npm run api` | the NestJS API (port 3000, or `PORT`) |
-| `npm run ingest -- <codes…>` | downloads, checks and converts the given Directives into the store |
+| `npm run ingest` | downloads, checks and converts the 30 Directives in `apps/ingest/ingest.config.json` into a new store |
 | `npm run lint` | ESLint on every project |
 | `npm run format:check` | Prettier: fails if any code file is not formatted (`npm run format` fixes them) |
 | `npm run typecheck` | TypeScript on every project |
 | `npm test` | every test project (Vitest for the libs, web and ingest; Jest for the API) |
 | `npm run build` | builds every project |
 
-`curl http://localhost:3000/api/health` returns `{"directives":0,"indexSize":0,"lastIngest":null}` against an empty store.
+`curl http://localhost:3000/api/health` returns `{"directives":30,"indexSize":0,"lastIngest":"…"}` against the committed store.
 The API opens `data/takam.db` (set `DB_PATH` to use another file). If the file does not exist, the API creates it with an empty schema.
 If the API runs on another port (`PORT=3456 npm run api`), start the web app with `API_URL=http://localhost:3456 npm run web` so its `/api` proxy finds it.
 
-### Fill the store and read a Directive
+### Read a Directive
+The store (`data/takam.db`) is committed with the 30 Directives in it, so this needs no network:
 ```bash
-npm run ingest -- H.13.10.1     # one or more Document codes; needs network access to the Takam site
 npm run dev
 ```
 Then open http://localhost:4200/directive/H.13.10.1. The page shows the Directive's code, title, type, chapter path, edition, validity dates, a link to its page on the Takam site, and its text.
 An expired Directive (try `HZ.13.10.1.1`) gets a red "הוראה זו אינה בתוקף" (this Directive is not in force) banner.
 
+### Refill the store
+```bash
+npm run ingest     # needs network access to the Takam site
+```
+Ingest reads the Document codes from `apps/ingest/ingest.config.json` (the 30 in `docs/plan.md`). It finds each one by its Document code (`documentcodetext`), so Temporary Instructions (`HZ.…`) and Messages (`HOD.…`) are found the same way as Instructions.
 For each code, ingest does the following:
 1. Finds the Document in the site's Document list.
 2. Takes its highest Edition and downloads that Edition's Word file.
 3. Puts the file through the security gate.
 4. Converts it with Mammoth.
-5. Writes it to `data/takam.db`.
+5. Writes it to a new store, `data/takam.db.tmp`.
 
-It prints `✓` or `✗ <reason>` for each code and exits with code 1 if any code failed.
+It prints `✓` or `✗ <reason>` for each code. Then:
+- If at most 20% of the files were rejected, it records the time of the run and moves the new store over `data/takam.db`.
+- If more than 20% were rejected, it deletes the new store, keeps the old one, and exits with code 1.
 The raw files are kept in `data/raw/`, which is gitignored and never served.
 `GET /api/directives/:code` returns the stored Directive, or 404 for an unknown code.
 
@@ -73,16 +80,18 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
 - **Health is tested over real HTTP.** The API test starts the whole Nest app on a random port with an in-memory SQLite database (`DB_PATH=:memory:`) and calls it with `fetch`, so it checks the route, the module wiring and the schema together.
 - **The web test fakes only `fetch`.** The component is rendered for real; only the network call to the API is replaced.
 - **The schema is created on startup** with `CREATE TABLE IF NOT EXISTS`, so a missing or empty DB file is never an error. Later milestones add columns and tables.
-- **`data/takam.db` is not committed yet.** ADR 0003 commits it once ingest fills it with the 30-Directive subset (issue #5). Until then, `.gitignore` keeps it out, and you fill it yourself with `npm run ingest`. The schema gained columns in this step and `CREATE TABLE IF NOT EXISTS` does not change an existing table, so delete an older `data/takam.db` before running ingest.
+- **`data/takam.db` is committed** (ADR 0003), so a clean clone runs the viewer and the tests with no network. Each ingest run builds a whole new store, so a schema change only needs a new run.
 - **A fourth library, `libs/store`.** Ingest writes the store and the API reads it, so the schema and the SQL live in one place that both import. It is Node-only (`node:sqlite`), which is why it is not in `libs/shared`: the web app imports `libs/shared`. In the API, `StoreService` is just `Store` made into a Nest provider.
 - **In force is computed by the API on each request**, from the dates and today's date in Israel (ADR 0001). The store keeps only the dates, so a Directive turns expired at midnight without a new ingest. `isInForce` compares ISO date strings, which sort the same way as dates. Both ends are inclusive, and a missing valid-to means no end.
 - **The security gate checks the cheapest things first:**
   1. the size (under 2 MB)
   2. the zip magic bytes `PK\x03\x04`, with a separate reason when the file is the site's HTML page
   3. that the zip opens and contains `word/document.xml`
+  4. that it is not a zip bomb: fewer than 200 entries (the real files have about 30) and under 20 MB once expanded
 
-  The zip-bomb limits (entry count, expanded size) come with the full subset in issue #5.
-- **Ingest writes straight into the live store for now.** The plan says ingest exits non-zero if more than 20% of files are rejected, and the old DB stays live. That rule needs the full subset and an atomic swap of the DB file, so it comes in issue #5. Until then, any failed code gives exit code 1.
+  For the expanded size, the gate does not trust the sizes the zip states for its entries, because a zip bomb can lie there. It expands every entry as a stream and counts the bytes, stopping at 20 MB, so a bomb never fills the memory.
+- **Ingest builds a new store and swaps it in.** It writes to `data/takam.db.tmp` and, only if at most 20% of the files were rejected, renames it to `data/takam.db`. A rename within one folder is atomic, so the API never opens a half-written file, and a failed run (say the site's firewall answers every download with its HTML page) leaves the previous store in place. A few rejected files are logged but don't fail the run: one changed Directive shouldn't block the other 29. An API that is already running keeps reading the old file until it restarts.
+- **`runIngest` takes the site as a parameter.** `main.ts` passes the real site client (`takam-site.ts`), and the tests pass a fake one that serves tiny Word files or the site's HTML page. That way the 20% rule and the swap are tested without the network.
 - **The validity dates come from the Edition ingest converts** (`rtn_validfrom__c` / `rtn_validto__c`), not from the Document list. The text and the dates then always belong to the same Edition. For the latest Edition the two sources hold the same dates. All 1,247 dates on the site are UTC midnight (`…T00:00:00.000Z`), so ingest keeps the first 10 characters as the ISO date.
 - **The download URL ends with the Document code** (`…/DownloadDocument/{contentVersionId}/{code}`). The last segment is only a file name, but an empty one makes the site answer with its HTML page.
 - **Ingest names itself in the User-Agent header** (`takam-poc-ingest/0.1`). The site's firewall (Sucuri) answers 403 to Node's default User-Agent, `node`.
@@ -92,7 +101,7 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
   - the Instructions (H.13.10.1, HZ.13.10.1.1): Word's standard `heading 1`, plus a custom `נספח - כותרת` for appendix titles
   - H.1.1.1: custom numbered styles `כות_1`, `כות_1.1` and `כות_1.1.1`. Without a mapping, Mammoth shows these as list items, because Word numbers them like a list.
 
-  Every top-level heading becomes `h2`, because the page's own `h1` is the Directive's title, and the levels below move down one. Word's table of contents (`toc 1-3`, `תוכן_עניינים`) is dropped: its page numbers mean nothing on the web. A mapping is only added for a style seen in a real file. The other Directives get checked when the full subset is ingested (issue #5).
+  Every top-level heading becomes `h2`, because the page's own `h1` is the Directive's title, and the levels below move down one. Word's table of contents (`toc 1-3`, `תוכן_עניינים`) is dropped: its page numbers mean nothing on the web. A mapping is only added for a style seen in a real file. After the full subset was ingested, the other 28 files were checked for styles Mammoth doesn't know. None of them is a heading: they are numbered clauses (`סעיף רמה 2`…`6`, `תת סעיף`), definitions (`הגדרות`), appendix descriptions (`נספח - תיאור`) and table captions (`כותרת טבלת נספחים`). Mammoth shows them as plain paragraphs, which is right, so no mapping was added.
 - **The HTML is sanitized twice: by ingest before it is stored, and by the API before it is sent.** The sanitizer (`libs/sanitize`, with sanitize-html) is an allowlist: `h2`–`h4`, `p`, `br`, lists, tables (with `colspan`/`rowspan`), `strong`, `em` and `a`. Nothing else survives, including `style` and every `on…` attribute. A removed tag keeps its text, except `<script>` and `<style>`, which go with their content. Only links to `http(s)` addresses stay links. Any other link (a `javascript:` link, or a footnote link like `#footnote-1`, which can't work once the ids are removed) is reduced to its text.
   - Why twice: the viewer inserts the HTML with `dangerouslySetInnerHTML`, so the API must never send unsafe HTML, even from a store that was filled before the sanitizer existed or was edited by hand. Cleaning in ingest keeps the stored HTML (and the chunks built from it later) clean, and cleaning in the API is the last check before the browser. The cost is a few milliseconds per request.
   - It is a library, not a file in ingest, because both apps call it.
