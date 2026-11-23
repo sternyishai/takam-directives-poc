@@ -70,6 +70,22 @@ export function DirectivePage() {
         </p>
       )}
 
+      {/*
+        The summary was written by an LLM at ingest (libs/llm), so the page
+        says so: the Directive's own text below is what binds. A <section>
+        with a label is a "region" that screen readers can jump to. There is
+        no summary when enrichment failed for this Directive.
+      */}
+      {directive.summary && (
+        <section aria-labelledby="summary-title" className="directive-summary">
+          <h2 id="summary-title">תקציר</h2>
+          <p>{directive.summary}</p>
+          <p className="summary-note">
+            נכתב על ידי מודל שפה. הנוסח המחייב הוא נוסח ההוראה.
+          </p>
+        </section>
+      )}
+
       <p>{directive.chapterPath.join(' › ')}</p>
 
       <dl className="directive-details">

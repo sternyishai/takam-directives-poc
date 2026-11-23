@@ -1,7 +1,8 @@
 /**
  * The SQLite schema (see docs/adr/0003). `IF NOT EXISTS` makes it safe to run
  * on every start: an empty file gets the tables, an existing one is untouched.
- * Later milestones add columns and tables (enrichment, chunks).
+ * Later milestones add tables (chunks). A column added to a table here does
+ * not reach a store that already has the table: re-run ingest to get it.
  */
 export const SCHEMA = `
   CREATE TABLE IF NOT EXISTS directives (
@@ -12,7 +13,13 @@ export const SCHEMA = `
     edition      INTEGER NOT NULL,  -- the Edition number the HTML was converted from
     valid_from   TEXT,              -- ISO date
     valid_to     TEXT,              -- ISO date; NULL means no end (ADR 0001)
-    html         TEXT NOT NULL      -- the text, converted from the Word file
+    html         TEXT NOT NULL,     -- the text, converted from the Word file
+    -- The LLM enrichment, in Hebrew. All three are NULL when it failed, and
+    -- then enrichment_error says why.
+    summary          TEXT,
+    keywords         TEXT,          -- JSON array of strings
+    questions        TEXT,          -- JSON array of strings
+    enrichment_error TEXT
   );
 
   CREATE TABLE IF NOT EXISTS ingest_runs (

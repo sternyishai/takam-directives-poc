@@ -1,4 +1,4 @@
-import { sanitizeDirectiveHtml } from '@takam/sanitize';
+import { htmlToText, sanitizeDirectiveHtml } from '@takam/sanitize';
 import type { SearchableDirective } from '@takam/search';
 import type { StoredDirective } from '@takam/store';
 
@@ -13,23 +13,6 @@ const EXCERPT_LENGTH = 200;
  */
 const HEADING = /<h[2-4]>([\s\S]*?)(?=<\/h[2-4]>|<(?:h[2-4]|p|ol|ul|table)>)/g;
 
-/**
- * HTML → plain text: tags removed, the five characters the sanitizer escapes
- * turned back, and runs of spaces made one. React escapes text again when it
- * shows the snippet, so this is safe.
- */
-function textOf(html: string): string {
-  return html
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&') // last, so "&amp;lt;" becomes "&lt;", not "<"
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 /** The first EXCERPT_LENGTH characters of the text, cut at a space. */
 function excerptOf(text: string): string {
   if (text.length <= EXCERPT_LENGTH) return text;
@@ -42,7 +25,7 @@ export function toSearchable(directive: StoredDirective): SearchableDirective {
   // Cleaned again, like the viewer's HTML, so the tags are the allowlist's.
   const html = sanitizeDirectiveHtml(directive.html);
   const headings = [...html.matchAll(HEADING)]
-    .map((match) => textOf(match[1]))
+    .map((match) => htmlToText(match[1]))
     .filter((heading) => heading !== '');
   return {
     code: directive.code,
@@ -52,6 +35,11 @@ export function toSearchable(directive: StoredDirective): SearchableDirective {
     validFrom: directive.validFrom,
     validTo: directive.validTo,
     headings,
-    excerpt: excerptOf(textOf(html)),
+    excerpt: excerptOf(htmlToText(html)),
+    // When enrichment failed, the Directive is still found by its title,
+    // code and headings.
+    summary: directive.enrichment?.summary ?? '',
+    keywords: directive.enrichment?.keywords ?? [],
+    questions: directive.enrichment?.questions ?? [],
   };
 }

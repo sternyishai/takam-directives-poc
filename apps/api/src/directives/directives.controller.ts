@@ -20,7 +20,16 @@ export class DirectivesController {
       throw new NotFoundException(`No Directive with code ${code}`);
     }
     return {
-      ...record,
+      code: record.code,
+      title: record.title,
+      type: record.type,
+      chapterPath: record.chapterPath,
+      edition: record.edition,
+      validFrom: record.validFrom,
+      validTo: record.validTo,
+      // The keywords and questions are only for search, so only the summary
+      // is sent. null when enrichment failed: the page then shows none.
+      summary: record.enrichment?.summary ?? null,
       // Ingest already cleaned the HTML before storing it. Cleaning it again
       // here means the page never gets unsafe HTML, even from an old store or
       // a hand-edited one.

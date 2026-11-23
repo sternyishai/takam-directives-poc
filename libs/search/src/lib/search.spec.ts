@@ -12,6 +12,9 @@ const directive = (
   validTo: null,
   headings: [],
   excerpt: '',
+  summary: '',
+  keywords: [],
+  questions: [],
   ...fields,
 });
 
@@ -52,13 +55,34 @@ const perDiem = directive({
   // The real text says "קצובות השהייה והלינה (אש"ל)" in its body.
   headings: ['תעריפי אש"ל'],
 });
-/** Expired in 2022. */
+/** Expired in 2022. Like on the site, it has no keywords: only the LLM's. */
 const covidFlights = directive({
   code: 'HZ.13.10.1.1',
   title: "נסיעות בתפקיד לחו''ל בתקופת קורונה",
   type: 'Temporary Instruction',
   chapterPath: flights.chapterPath,
   validTo: '2022-06-01',
+  summary: 'הוראת שעה לנסיעות לחו"ל בזמן מגפת הקורונה: בדיקות ובידוד',
+  excerpt: 'ההנחיות בעניין טיסות המשך וטיסות ישירות',
+});
+/** Expired in 2025, and has no keywords on the site either. */
+const companyCar = directive({
+  code: 'HOD.13.5.1.1',
+  title: 'שווי השימוש ברכב צמוד',
+  type: 'Message',
+  validTo: '2025-12-31',
+  summary: 'ההודעה קובעת את מיסוי שווי השימוש ברכב שהעובד מקבל מהמשרד',
+  keywords: ['רכב צמוד', 'מס הכנסה'],
+  questions: ['כמה מס משלמים על רכב צמוד?'],
+});
+/** Its LLM enrichment mentions "ביטוח" (insurance); its heading does not. */
+const rentedTransport = directive({
+  code: 'H.13.4.2',
+  title: 'שכירת כלי תחבורה',
+  headings: ['מבוא'],
+  summary: 'החזר הוצאות על כלי תחבורה שכור, כולל ביטוח',
+  keywords: ['ביטוח'],
+  questions: ['מי משלם את הביטוח?'],
 });
 /** In force up to and including 2026-12-31. */
 const perDiemRates = directive({
@@ -93,6 +117,8 @@ const index = new DirectiveSearch([
   perDiemRates,
   futureRates,
   pensions,
+  companyCar,
+  rentedTransport,
 ]);
 
 const TODAY = '2026-11-23';
@@ -189,7 +215,13 @@ describe('DirectiveSearch', () => {
     });
   });
 
-  it('uses the opening of the text as the snippet when no heading matched', () => {
+  it('uses the summary as the snippet when no heading matched', () => {
+    const [first] = index.search('מגפת', { today: TODAY, inForce: false });
+
+    expect(first.snippet).toBe(covidFlights.summary);
+  });
+
+  it('uses the opening of the text as the snippet when no heading matched and there is no summary', () => {
     const [first] = index.search('טיסות', { today: TODAY });
 
     expect(first.snippet).toBe(
@@ -252,5 +284,26 @@ describe('DirectiveSearch', () => {
 
   it.each(['', '   '])('returns nothing for an empty query (%j)', (query) => {
     expect(codesFor(query, { inForce: false })).toEqual([]);
+  });
+
+  describe("enrichment (the LLM's summary, keywords and questions)", () => {
+    it('finds both Expired Directives, which have no site keywords, by a word from their summary', () => {
+      expect(codesFor('מגפת', { inForce: false })).toEqual(['HZ.13.10.1.1']);
+      expect(codesFor('מיסוי', { inForce: false })).toEqual(['HOD.13.5.1.1']);
+    });
+
+    it('finds a Directive by an LLM keyword or a likely question', () => {
+      expect(codesFor('מס', { inForce: false })).toContain('HOD.13.5.1.1');
+      expect(codesFor('משלם')).toEqual(['H.13.4.2']);
+    });
+
+    it('ranks a match in a heading above a match in the enrichment only', () => {
+      // HOD.13.4.1.2 has "הביטוח" in a heading; H.13.4.2 has "ביטוח" only
+      // in its summary, keywords and questions.
+      const codes = codesFor('ביטוח');
+      expect(codes.indexOf('HOD.13.4.1.2')).toBeLessThan(
+        codes.indexOf('H.13.4.2'),
+      );
+    });
   });
 });

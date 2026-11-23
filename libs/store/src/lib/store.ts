@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { DirectiveType } from '@takam/shared';
+import type { DirectiveType, Enrichment } from '@takam/shared';
 import { SCHEMA } from './schema.js';
 
 /**
@@ -23,6 +23,10 @@ export interface StoredDirective {
   validFrom: string | null;
   validTo: string | null;
   html: string;
+  /** The LLM's summary, keywords and questions; null when enrichment failed. */
+  enrichment: Enrichment | null;
+  /** Why enrichment failed, or null when it did not. */
+  enrichmentError: string | null;
 }
 
 /** One row of the search log: what was searched, and how many results it got. */
@@ -35,18 +39,38 @@ export interface SearchLogEntry {
   searchedAt: string;
 }
 
-/** A directives row as SQLite returns it: chapter_path is still JSON text. */
-type DirectiveRow = Omit<StoredDirective, 'chapterPath'> & {
+/**
+ * A directives row as SQLite returns it: the arrays are still JSON text, and
+ * the enrichment is three separate columns.
+ */
+type DirectiveRow = Omit<StoredDirective, 'chapterPath' | 'enrichment'> & {
   chapterPath: string;
+  summary: string | null;
+  keywords: string | null;
+  questions: string | null;
 };
 
 /** The columns of `directives`, renamed to the field names of StoredDirective. */
 const DIRECTIVE_COLUMNS = `code, title, type, chapter_path AS chapterPath, edition,
-  valid_from AS validFrom, valid_to AS validTo, html`;
+  valid_from AS validFrom, valid_to AS validTo, html,
+  summary, keywords, questions, enrichment_error AS enrichmentError`;
 
-/** chapter_path is stored as JSON text; turn it back into an array. */
+/** Turns a row back into a StoredDirective: JSON text into arrays, and the three enrichment columns into one object. */
 function toStoredDirective(row: DirectiveRow): StoredDirective {
-  return { ...row, chapterPath: JSON.parse(row.chapterPath) };
+  const { summary, keywords, questions, ...rest } = row;
+  return {
+    ...rest,
+    chapterPath: JSON.parse(row.chapterPath),
+    // All three are saved together, so a summary means the others are there.
+    enrichment:
+      summary === null
+        ? null
+        : {
+            summary,
+            keywords: JSON.parse(keywords ?? '[]'),
+            questions: JSON.parse(questions ?? '[]'),
+          },
+  };
 }
 
 /**
@@ -69,8 +93,9 @@ export class Store {
     this.db
       .prepare(
         `INSERT OR REPLACE INTO directives
-           (code, title, type, chapter_path, edition, valid_from, valid_to, html)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           (code, title, type, chapter_path, edition, valid_from, valid_to, html,
+            summary, keywords, questions, enrichment_error)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         directive.code,
@@ -81,6 +106,14 @@ export class Store {
         directive.validFrom,
         directive.validTo,
         directive.html,
+        directive.enrichment?.summary ?? null,
+        directive.enrichment
+          ? JSON.stringify(directive.enrichment.keywords)
+          : null,
+        directive.enrichment
+          ? JSON.stringify(directive.enrichment.questions)
+          : null,
+        directive.enrichmentError,
       );
   }
 

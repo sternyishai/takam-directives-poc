@@ -12,6 +12,7 @@ const travel: Directive = {
   validFrom: '2026-01-11',
   validTo: null,
   inForce: true,
+  summary: 'ההוראה מסבירה איך מזמינים טיסה לנסיעה בתפקיד',
   html: '<h1>מבוא</h1><p>הזמנת שירותי נסיעות</p>',
   officialUrl: 'https://takam.mof.gov.il/document/H.13.10.1',
 };
@@ -61,6 +62,30 @@ describe('The Directive viewer (/directive/:code)', () => {
     const source = screen.getByRole('link', { name: 'המקור באתר תכ"ם' });
     expect(source.getAttribute('href')).toBe(travel.officialUrl);
     expect(screen.queryByRole('alert')).toBeNull(); // in force: no banner
+  });
+
+  it('shows the summary at the top, marked as written by a language model', async () => {
+    stubApi(200, travel);
+
+    openViewer('H.13.10.1');
+
+    const summary = await screen.findByRole('region', { name: 'תקציר' });
+    expect(summary.textContent).toContain(travel.summary);
+    expect(summary.textContent).toContain('נכתב על ידי מודל שפה');
+    // At the top: before the Directive's own text.
+    const text = screen.getByText('הזמנת שירותי נסיעות');
+    expect(
+      summary.compareDocumentPosition(text) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('shows no summary when enrichment failed', async () => {
+    stubApi(200, { ...travel, summary: null });
+
+    openViewer('H.13.10.1');
+
+    await screen.findByRole('heading', { level: 1, name: travel.title });
+    expect(screen.queryByRole('region', { name: 'תקציר' })).toBeNull();
   });
 
   it('shows a red banner on an expired Directive', async () => {

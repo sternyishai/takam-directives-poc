@@ -27,7 +27,7 @@ With an empty store it says "במאגר 0 הוראות". You can also run one si
 |---|---|
 | `npm run web` | the web app (Vite dev server, port 4200; `/api` is proxied to port 3000) |
 | `npm run api` | the NestJS API (port 3000, or `PORT`) |
-| `npm run ingest` | downloads, checks and converts the 30 Directives in `apps/ingest/ingest.config.json` into a new store |
+| `npm run ingest` | downloads, checks, converts and enriches the 30 Directives in `apps/ingest/ingest.config.json` into a new store (needs `GOOGLE_API_KEY`) |
 | `npm run lint` | ESLint on every project |
 | `npm run format:check` | Prettier: fails if any code file is not formatted (`npm run format` fixes them) |
 | `npm run typecheck` | TypeScript on every project |
@@ -45,7 +45,7 @@ npm run dev
 Open http://localhost:4200, type a word or a Document code (`נסיעות`, `13.10.1`) and press "חיפוש" (search). The results are a flat list, best match first. Each result shows:
 - its chapter path as numbers (`13 › 13.10 › 13.10.1`)
 - its Directive type
-- a snippet (the heading that matched, or the opening of the text)
+- a snippet (the heading that matched, or else the Directive's summary)
 - a red "לא בתוקף" (not in force) badge if it is not in force
 
 Only In-force Directives are shown until you tick "הצג גם הוראות שאינן בתוקף" (show Directives that are not in force too).
@@ -58,12 +58,12 @@ The store (`data/takam.db`) is committed with the 30 Directives in it, so this n
 ```bash
 npm run dev
 ```
-Then open http://localhost:4200/directive/H.13.10.1. The page shows the Directive's code, title, type, chapter path, edition, validity dates, a link to its page on the Takam site, and its text.
+Then open http://localhost:4200/directive/H.13.10.1. The page shows the Directive's code, title, type, a short summary (marked as written by a language model), its chapter path, edition, validity dates, a link to its page on the Takam site, and its text.
 An expired Directive (try `HZ.13.10.1.1`) gets a red "הוראה זו אינה בתוקף" (this Directive is not in force) banner.
 
 ### Refill the store
 ```bash
-npm run ingest     # needs network access to the Takam site
+npm run ingest     # needs network access to the Takam site and GOOGLE_API_KEY in .env
 ```
 Ingest reads the Document codes from `apps/ingest/ingest.config.json` (the 30 in `docs/plan.md`). It finds each one by its Document code (`documentcodetext`), so Temporary Instructions (`HZ.…`) and Messages (`HOD.…`) are found the same way as Instructions.
 For each code, ingest does the following:
@@ -71,9 +71,10 @@ For each code, ingest does the following:
 2. Takes its highest Edition and downloads that Edition's Word file.
 3. Puts the file through the security gate.
 4. Converts it with Mammoth.
-5. Writes it to a new store, `data/takam.db.tmp`.
+5. Enriches it: one Gemini call returns a Hebrew summary, keywords and likely questions (see "Enrichment" below).
+6. Writes it to a new store, `data/takam.db.tmp`.
 
-It prints `✓` or `✗ <reason>` for each code. Then:
+It prints `✓` or `✗ <reason>` for each code, and a line for each enrichment failure. Then:
 - If at most 20% of the files were rejected, it records the time of the run and moves the new store over `data/takam.db`.
 - If more than 20% were rejected, it deletes the new store, keeps the old one, and exits with code 1.
 The raw files are kept in `data/raw/`, which is gitignored and never served.
@@ -85,8 +86,8 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
 | `apps/web` | React + Vite, Hebrew and right-to-left (`<html lang="he" dir="rtl">`) |
 | `apps/api` | NestJS: `GET /api/health`, `GET /api/search` and `GET /api/directives/:code` |
 | `apps/ingest` | Node CLI that fills the store: Takam site client, security gate, Mammoth conversion |
-| `libs/search` | `DirectiveSearch`: MiniSearch over the title, Document code and headings, with Hebrew normalization and typo tolerance |
-| `libs/llm` | LangChain models, enrichment, chat (milestone 6) |
+| `libs/search` | `DirectiveSearch`: MiniSearch over the title, Document code, headings and enrichment, with Hebrew normalization and typo tolerance |
+| `libs/llm` | LangChain chat models (Gemini, and the fake one for tests) and enrichment; chat comes in milestone 7 |
 | `libs/shared` | types shared by the API and the web app (`HealthReport`, `Directive`, `SearchResult`), plus `isInForce`, `todayInIsrael` and `officialPageUrl` |
 | `libs/store` | the SQLite schema and the `Store` class: ingest writes to it, the API reads from it |
 
@@ -135,10 +136,10 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
   - The cost: different words can become the same form. `ביטוח` (insurance) and `בטוח` (safe) both become `טח`, and the trap `הרכב התקציב` (the composition of the budget) now matches "רכב". The title weight keeps the real car Directives above it.
 - **Typos are tolerated, scaled to the word's length** (`typosAllowed`): no typo up to 3 letters, one from 4 letters, and at most two, from 8, counted after normalization. The cost: a 4-letter word one letter longer than a real word matches it, so `רכבת` (train) finds `רכב` (car), below the exact matches. Short Hebrew words are often one letter apart (`רכב` car, `רכז` coordinator), so they must match exactly. A word with a digit (a Document code or a number) is always matched exactly, so `13.10.1` never finds `13.10.2`. A typo match counts 0.2 of an exact one (MiniSearch's default is 0.45). With 0.45, "תשלום" ranked a Directive whose title has "תשלומים" (one edit away) above the one with "תשלום" in a heading.
 - **Document codes are indexed as two words:** the whole code and the code without its letters (`H.13.10.1` → `h.13.10.1`, `13.10.1`). Typing `13.10.1` finds `H.13.10.1` and not `HZ.13.10.1.1`, because a code is matched as a whole.
-- **Field weights:** a word in the title or the code counts three times as much as a word in a heading. The title says what a Directive is about, while a heading can mention a word in passing.
+- **Field weights:** a word in the title or the code counts three times as much as a word in a heading. The title says what a Directive is about, while a heading can mention a word in passing. The enrichment counts less than a heading: keywords 0.7, summary and questions 0.5 each (see "Enrichment").
 - **Validity first.** The filter defaults to In force. When expired Directives are included, every In-force result still comes before every expired one, so an old rule never ranks above a current one. A Directive whose valid-from date is still to come (HOD.13.4.1.2 starts on 2027-01-01) is not In force either, so it gets the same red badge.
 - **`search()` takes today's date as an argument** (`{ today }`) instead of reading the clock, so the tests can check the inclusive valid-to boundary on any day. The API passes `todayInIsrael()`, which moved from the directives controller to `libs/shared` so both controllers use it.
-- **The snippet is the first heading that contains a matched word**, or else the first 200 characters of the text. The summary from enrichment (issue #9) will replace that fallback.
+- **The snippet is the first heading that contains a matched word**, or else the Directive's summary. The first 200 characters of the text are used only when enrichment failed. The opening of a Directive is often boilerplate ("על פי פקודת…"), while the summary says what the Directive is about.
 - **The API builds the index from the store once, when it starts** (`SearchService`). It pulls the heading text out of the sanitized HTML with a regular expression. That is safe here because the sanitizer leaves only bare tags such as `<h2>`. A heading stops at its closing tag or at the next block tag, as a guard against a heading that is never closed (as H.13.12.1's was before issue #20). `indexSize` in `/api/health` is the number of Directives in the index.
 - **The search log lives in the store**, as the plan says, so running the API against `data/takam.db` adds rows to the committed file. Run it with `DB_PATH` pointing at a copy if you don't want that. Each ingest builds a new store, so ingest also clears the log.
 - **The quick-search dropdown is hand-written, with no combobox library.** It calls the same endpoint as the full results, with the same filter and `limit=3`. The API cuts one ranking to the limit, so the dropdown always shows the first 3 of the full results, in the same order. On the real data, "נסיעות" gives H.13.10.3, H.13.10.1 and H.13.10.2 in both.
@@ -151,6 +152,18 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
   - The cost: every pause in typing is a search, so the dropdown's requests are in `search_log` too, with partial words such as "נסיע". They can be told apart only by their timing.
 - **The results list changes only when a search is submitted.** Typing in the box only updates the dropdown, not the list. Ticking the filter re-runs the last submitted query, not the text now in the box.
 - **On the real data, "רכב" now finds H.13.4.1 ("ברכב פרטי") first.** Before prefixes were stripped it found nothing: the only Directive with the word on its own (HOD.13.4.1.2) is not in force until 2027. The trap H.1.1.1 comes second, below the title match.
+- **Enrichment** (`libs/llm`, issue #9). Ingest makes one Gemini call per Directive. The call returns `{ summary, keywords[], questions[] }` in Hebrew and goes through LangChain's `withStructuredOutput` with a zod schema (ADR 0002).
+  - **Every reply is checked against the zod schema in our code**, not only by the model's own parser. The schema requires a non-empty summary, 1–15 keywords and 1–10 questions, each with at least one Hebrew letter. LangChain's fake model in the tests does not check its replies, and a `refine` (the Hebrew check) is never sent to the model, so only zod can run it.
+  - **One retry.** A reply that does not match, or a call that throws, is tried once more. If the second try also fails, the Directive is still stored, with `enrichment_error` set and no enrichment. It is not counted as rejected for the 20% rule: it can still be found by its title, code and headings, and read. A bad LLM day must not throw away a good store.
+  - **The model gets the code, the title and up to 20,000 characters of the plain text** (the HTML with its tags removed by `htmlToText`, which moved from the API to `libs/sanitize` so ingest can use it too). Most Directives are shorter. For the longest ones, the opening already says what they are about, and the limit keeps their cost close to the rest. The instructions and the field descriptions are in Hebrew, so the model answers in Hebrew.
+  - **temperature 0**, so a re-run gives (nearly) the same enrichment.
+  - **The model names were checked against the key** on 2026-11-24: `gemini-3.6-flash` answers `generateContent` and `gemini-embedding-001` answers `embedContent` (3,072 dimensions), so `.env.example` keeps them. One real call takes about 8 seconds, and the full run of 30 enriched all 30 with no failures.
+  - **The enrichment is stored as columns of `directives`** (`summary`, `keywords`, `questions` as JSON, `enrichment_error`), and `Store` returns them as one `enrichment` object or `null`. That way a Directive has all three parts or none.
+  - **The API sends only the summary** (`summary` in `GET /api/directives/:code`, `null` when enrichment failed). The keywords and questions are only for search.
+  - **The viewer shows the summary at the top**, under the title, in a box labelled "תקציר" (summary) with the note "נכתב על ידי מודל שפה. הנוסח המחייב הוא נוסח ההוראה." (written by a language model; the Directive's own wording is what binds). There is no box when enrichment failed.
+  - **The plan put keywords above headings in the weights; this issue put all of the enrichment below them.** We follow the issue: the headings are the Directive's own text, while the enrichment is the model's reading of it.
+  - **What it fixed on the real data:** neither Expired Directive has keywords on the site. Now `בידוד` (isolation) finds HZ.13.10.1.1, and `זקיפת` (imputing a benefit) finds HOD.13.5.1.1, through words that are only in their summaries.
+  - **`.env` is read by ingest with Node's own `process.loadEnvFile`**, so there is no dotenv dependency. A variable already set in the shell wins.
 - **Vitest runs once, not in watch mode** (`testMode: "run"` in `nx.json`), so `npm test` finishes.
 
 ### Tests and CI
@@ -160,7 +173,8 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
   - the ingest security gate
   - the ingest conversion: the heading style map, on tiny Word files built in the test
   - the sanitizer in `libs/sanitize` (`<script>`, `onerror`, `javascript:` links)
-  - search (`libs/search`): whole words, the "רכב" trap, code lookup, Hebrew spellings (full/short, prefixes, quotes, niqqud), typos, the in-force default, the inclusive valid-to boundary, a future valid-from, snippets, the limit and an empty query
+  - search (`libs/search`): whole words, the "רכב" trap, code lookup, Hebrew spellings (full/short, prefixes, quotes, niqqud), typos, the in-force default, the inclusive valid-to boundary, a future valid-from, snippets, the limit, an empty query, and the enrichment (both Expired Directives found by a summary word, enrichment ranked below headings)
+  - ingest with LangChain's fake chat model: an invalid first reply followed by a valid retry is accepted, and two invalid replies are stored as an enrichment failure
   - the web pages, rendered for real with only `fetch` faked
 - **Integration tests (Jest, `apps/api`):** each one starts the whole Nest app on a random port, on an in-memory or temporary SQLite file, and calls it with `fetch`. They also check the CSP header, that unsafe HTML in the store is sent sanitized, that "רכב" does not put the trap H.1.1.1 first, and that every search writes a row to the search log.
 

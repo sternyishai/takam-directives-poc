@@ -1,7 +1,9 @@
-// One ingest run: fetch → security gate → convert → a new store.
+// One ingest run: fetch → security gate → convert → enrich → a new store.
 // main.ts reads the config and calls runIngest with the real site; the tests
-// call it with a fake one.
+// call it with a fake one, and with LangChain's fake chat model.
 
+import { enrichDirective, type ChatModel } from '@takam/llm';
+import { htmlToText } from '@takam/sanitize';
 import { DIRECTIVE_TYPES, type DirectiveType } from '@takam/shared';
 import { Store } from '@takam/store';
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -34,6 +36,12 @@ export interface IngestResult {
   replacedStore: boolean;
 }
 
+/** What a Directive needs from the outside world: the site, and an LLM to enrich it. */
+interface Sources {
+  site: TakamSite;
+  model: ChatModel;
+}
+
 /** A run that rejects more than this share of the files keeps the old store. */
 const MAX_REJECTED_SHARE = 0.2; // 20%
 
@@ -53,11 +61,16 @@ function isDirectiveType(type: string): type is DirectiveType {
  * site rather than with a few files (for example, its firewall answering
  * every download with an HTML page). Then the new store is thrown away and
  * the old one stays in place.
+ *
+ * Each Directive is enriched by `model` (libs/llm). A Directive whose
+ * enrichment fails is still stored, with the reason, and is not counted as
+ * rejected: it can still be found by its title and headings, and read.
  */
 export async function runIngest(
   codes: string[],
   dbPath: string,
   site: TakamSite,
+  model: ChatModel,
 ): Promise<IngestResult> {
   const tempPath = `${dbPath}.tmp`;
   rmSync(tempPath, { force: true }); // left over from a run that crashed
@@ -68,7 +81,7 @@ export async function runIngest(
 
   for (const code of codes) {
     try {
-      await ingestDirective(code, documents, site, store, rawFolder);
+      await ingestDirective(code, documents, { site, model }, store, rawFolder);
       console.log(`✓ ${code}`);
     } catch (error) {
       rejected++;
@@ -97,7 +110,7 @@ export async function runIngest(
 async function ingestDirective(
   code: string,
   documents: SiteDocument[],
-  site: TakamSite,
+  { site, model }: Sources,
   store: Store,
   rawFolder: string,
 ): Promise<void> {
@@ -123,6 +136,16 @@ async function ingestDirective(
   mkdirSync(rawFolder, { recursive: true });
   writeFileSync(join(rawFolder, `${code}.docx`), file);
 
+  const html = await convertToHtml(file);
+  const enrichment = await enrichDirective(model, {
+    code,
+    title: document.name,
+    text: htmlToText(html),
+  });
+  if (!enrichment.ok) {
+    console.error(`  ${code}: enrichment failed: ${enrichment.error}`);
+  }
+
   store.saveDirective({
     code,
     title: document.name,
@@ -131,6 +154,8 @@ async function ingestDirective(
     edition: edition.rtn_versionnumber__c,
     validFrom: toIsoDate(edition.rtn_validfrom__c),
     validTo: toIsoDate(edition.rtn_validto__c),
-    html: await convertToHtml(file),
+    html,
+    enrichment: enrichment.ok ? enrichment.enrichment : null,
+    enrichmentError: enrichment.ok ? null : enrichment.error,
   });
 }
