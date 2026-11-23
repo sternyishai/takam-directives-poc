@@ -25,6 +25,10 @@ export interface TakamSite {
 /** How a run went. */
 export interface IngestResult {
   stored: number;
+  /**
+   * Codes that could not be stored, for any reason: the gate rejected the
+   * file, the code is not on the site, or the Document is not a Directive.
+   */
   rejected: number;
   /** false when too many files were rejected and the old store was kept. */
   replacedStore: boolean;

@@ -17,6 +17,8 @@ test-output/
 
 # raw downloads are never committed or served (see docs/plan.md)
 data/raw/
+# the new store ingest builds before swapping it in; left behind only by a crashed run
+data/takam.db.tmp
 
 # editors and system files
 .vscode/*
