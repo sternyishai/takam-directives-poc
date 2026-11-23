@@ -8,7 +8,10 @@ import { join } from 'node:path';
 import { AppModule } from '../app/app.module';
 import { configureApp } from '../app/configure-app';
 
-/** Two Directives: one with no end date, one that ended in 2020. */
+/**
+ * Three Directives: one with no end date, one that ended in 2020, and one whose
+ * stored HTML is unsafe (as in a store filled before the sanitizer existed).
+ */
 const travel: StoredDirective = {
   code: 'H.13.10.1',
   title: 'טיסות ושירותים נלווים לנסיעות בתפקיד לחוץ לארץ',
@@ -28,6 +31,14 @@ const expired: StoredDirective = {
   validFrom: '2019-01-01',
   validTo: '2020-12-31',
 };
+const unsafe: StoredDirective = {
+  ...travel,
+  code: 'H.13.10.2',
+  html:
+    '<h2>מבוא</h2><script>alert(1)</script>' +
+    '<p onerror="alert(2)">טקסט</p>' +
+    '<p><a href="javascript:alert(3)">לחצו</a></p>',
+};
 
 describe('GET /api/directives/:code', () => {
   let app: INestApplication;
@@ -43,6 +54,7 @@ describe('GET /api/directives/:code', () => {
     const seed = new Store(process.env.DB_PATH);
     seed.saveDirective(travel);
     seed.saveDirective(expired);
+    seed.saveDirective(unsafe);
     seed.close();
 
     const moduleRef = await Test.createTestingModule({
@@ -76,6 +88,13 @@ describe('GET /api/directives/:code', () => {
 
     const directive = (await response.json()) as Directive;
     expect(directive.inForce).toBe(false);
+  });
+
+  it('sends only sanitized HTML, even when the stored HTML is unsafe', async () => {
+    const response = await fetch(`${baseUrl}/api/directives/H.13.10.2`);
+
+    const directive = (await response.json()) as Directive;
+    expect(directive.html).toBe('<h2>מבוא</h2><p>טקסט</p><p>לחצו</p>');
   });
 
   it('answers 404 for an unknown code', async () => {

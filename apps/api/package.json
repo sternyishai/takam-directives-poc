@@ -72,7 +72,8 @@
     "rxjs": "^7.8.0",
     "tslib": "^2.3.0",
     "@takam/shared": "*",
-    "@takam/store": "*"
+    "@takam/store": "*",
+    "@takam/sanitize": "*"
   },
   "devDependencies": {
     "@nestjs/testing": "^11.0.0"

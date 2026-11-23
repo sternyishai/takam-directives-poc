@@ -98,8 +98,8 @@ export function DirectivePage() {
       {/*
         The HTML was converted by ingest from the Directive's Word file. React
         escapes text by default, so inserting HTML needs this explicit prop.
-        Ingest has already passed it through a sanitizer (an allowlist of
-        tags, with no scripts, `on…` attributes or `javascript:` links).
+        The API sends it sanitized (an allowlist of tags, with no scripts,
+        `on…` attributes or `javascript:` links; see libs/sanitize).
       */}
       <div
         className="directive-text"

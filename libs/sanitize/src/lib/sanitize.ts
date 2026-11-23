@@ -43,8 +43,10 @@ const ALLOWLIST: sanitizeHtml.IOptions = {
 };
 
 /**
- * Cleans Mammoth's HTML before it is stored, because the viewer inserts it
- * into the page as is (`dangerouslySetInnerHTML`). Any tag or attribute not on
+ * Cleans a Directive's HTML, because the viewer inserts it into the page as
+ * is (`dangerouslySetInnerHTML`). Ingest calls it before storing the HTML, and
+ * the API calls it again before sending it, so HTML that got into the store
+ * some other way (an old store, a hand edit) is still cleaned. Any tag or attribute not on
  * the allowlist above is removed. A removed tag keeps its text, except
  * <script> and <style>, which are dropped with their content.
  * No `style` or `on…` attribute (like `onerror`) is on the list, so none survive.

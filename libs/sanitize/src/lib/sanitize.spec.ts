@@ -1,4 +1,4 @@
-import { sanitizeDirectiveHtml } from './sanitize';
+import { sanitizeDirectiveHtml } from './sanitize.js';
 
 describe('sanitizeDirectiveHtml', () => {
   it('removes a script tag and everything inside it', () => {

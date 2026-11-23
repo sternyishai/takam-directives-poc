@@ -23,6 +23,9 @@
     },
     {
       "path": "./libs/store"
+    },
+    {
+      "path": "./libs/sanitize"
     }
   ],
   "compilerOptions": {}

@@ -93,7 +93,10 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
   - H.1.1.1: custom numbered styles `כות_1`, `כות_1.1` and `כות_1.1.1`. Without a mapping, Mammoth shows these as list items, because Word numbers them like a list.
 
   Every top-level heading becomes `h2`, because the page's own `h1` is the Directive's title, and the levels below move down one. Word's table of contents (`toc 1-3`, `תוכן_עניינים`) is dropped: its page numbers mean nothing on the web. A mapping is only added for a style seen in a real file. The other Directives get checked when the full subset is ingested (issue #5).
-- **The HTML is sanitized once, in ingest, before it is stored** (`apps/ingest/src/sanitize.ts`, with sanitize-html). It is an allowlist: `h2`–`h4`, `p`, `br`, lists, tables (with `colspan`/`rowspan`), `strong`, `em` and `a`. Nothing else survives, including `style` and every `on…` attribute. A removed tag keeps its text, except `<script>` and `<style>`, which go with their content. Only links to `http(s)` addresses stay links. Any other link (a `javascript:` link, or a footnote link like `#footnote-1`, which can't work once the ids are removed) is reduced to its text. The viewer then inserts this HTML with `dangerouslySetInnerHTML`. A store filled before this change still holds raw Mammoth output, so re-run ingest after pulling.
+- **The HTML is sanitized twice: by ingest before it is stored, and by the API before it is sent.** The sanitizer (`libs/sanitize`, with sanitize-html) is an allowlist: `h2`–`h4`, `p`, `br`, lists, tables (with `colspan`/`rowspan`), `strong`, `em` and `a`. Nothing else survives, including `style` and every `on…` attribute. A removed tag keeps its text, except `<script>` and `<style>`, which go with their content. Only links to `http(s)` addresses stay links. Any other link (a `javascript:` link, or a footnote link like `#footnote-1`, which can't work once the ids are removed) is reduced to its text.
+  - Why twice: the viewer inserts the HTML with `dangerouslySetInnerHTML`, so the API must never send unsafe HTML, even from a store that was filled before the sanitizer existed or was edited by hand. Cleaning in ingest keeps the stored HTML (and the chunks built from it later) clean, and cleaning in the API is the last check before the browser. The cost is a few milliseconds per request.
+  - It is a library, not a file in ingest, because both apps call it.
+  - sanitize-html's HTML parser (htmlparser2) ships only as an ES module. Node 24 loads it fine, but Jest can't, so `apps/api/jest.config.cts` tells Jest to transform those packages (`transformIgnorePatterns`).
 - **The API sends `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` on every response**, errors included. The API only sends JSON, so it may load nothing, and no site may frame it. The header is set in `configureApp` (`apps/api/src/app/configure-app.ts`), which `main.ts` and the e2e tests share, so the tests run the same setup as the real server. The page's own CSP belongs to whatever serves the built web app (see the production HLD).
 - **The official link is `https://takam.mof.gov.il/document/{code}`.** This is the site's own Angular route, `document/:id`, which loads a Document by its code.
 - **The router (`BrowserRouter`) wraps `App` in `main.tsx`**, so the tests can render `App` inside a `MemoryRouter` at any URL.
@@ -105,9 +108,10 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
 - **Unit tests (Vitest):**
   - `isInForce` and the other `libs/*` code
   - the ingest security gate
-  - the ingest conversion: the heading style map (on tiny Word files built in the test) and the sanitizer (`<script>`, `onerror`, `javascript:` links)
+  - the ingest conversion: the heading style map, on tiny Word files built in the test
+  - the sanitizer in `libs/sanitize` (`<script>`, `onerror`, `javascript:` links)
   - the web pages, rendered for real with only `fetch` faked
-- **Integration tests (Jest, `apps/api`):** each one starts the whole Nest app on a random port, on an in-memory or temporary SQLite file, and calls it with `fetch`. They also check the CSP header.
+- **Integration tests (Jest, `apps/api`):** each one starts the whole Nest app on a random port, on an in-memory or temporary SQLite file, and calls it with `fetch`. They also check the CSP header, and that unsafe HTML in the store is sent sanitized.
 
 No test needs the network or an API key.
 

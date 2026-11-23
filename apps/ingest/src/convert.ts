@@ -1,5 +1,5 @@
 import mammoth from 'mammoth';
-import { sanitizeDirectiveHtml } from './sanitize';
+import { sanitizeDirectiveHtml } from '@takam/sanitize';
 
 /**
  * Mammoth's style map: which Word paragraph style becomes which HTML tag.
