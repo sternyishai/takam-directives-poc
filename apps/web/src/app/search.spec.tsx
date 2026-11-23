@@ -119,12 +119,30 @@ describe('Search on the home page', () => {
     expect(screen.getByRole('link', { name: carInsurance.title })).toBeTruthy();
   });
 
-  it('shows a hint when nothing is found', async () => {
+  it('shows a hint when nothing is found, suggesting the filter', async () => {
     stubApi([]);
     openHome();
 
     searchFor('מילה שאין');
 
-    expect(await screen.findByText(/לא נמצאו הוראות/)).toBeTruthy();
+    expect(
+      await screen.findByText(
+        'לא נמצאו הוראות. כדאי לבדוק את האיות, או לסמן "הצג גם הוראות שאינן בתוקף".',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('does not suggest the filter when it is already on', async () => {
+    stubApi([]);
+    openHome();
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'הצג גם הוראות שאינן בתוקף' }),
+    );
+
+    searchFor('מילה שאין');
+
+    expect(
+      await screen.findByText('לא נמצאו הוראות. כדאי לבדוק את האיות.'),
+    ).toBeTruthy();
   });
 });
