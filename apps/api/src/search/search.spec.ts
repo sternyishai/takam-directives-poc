@@ -19,6 +19,8 @@ const base: Omit<StoredDirective, 'code' | 'title' | 'html'> = {
   edition: 1,
   validFrom: '2020-01-01',
   validTo: null,
+  enrichment: null,
+  enrichmentError: null,
 };
 const budgetTerms: StoredDirective = {
   ...base,
@@ -48,6 +50,12 @@ const expired: StoredDirective = {
   title: 'ביטוח נסיעות בתקופת קורונה',
   validTo: '2022-06-01',
   html: '<p>הוראת שעה</p>',
+  // Found by "מגפה" only through the LLM's summary.
+  enrichment: {
+    summary: 'ביטוח נסיעות לחו"ל בזמן מגפה',
+    keywords: [],
+    questions: [],
+  },
 };
 
 describe('GET /api/search', () => {
@@ -121,6 +129,14 @@ describe('GET /api/search', () => {
 
     expect(inForceOnly.map((r) => r.code)).not.toContain('HZ.13.10.1.1');
     expect(all.map((r) => r.code)).toContain('HZ.13.10.1.1');
+  });
+
+  it("finds a Directive by a word that is only in the LLM's summary", async () => {
+    const results = await search(
+      `q=${encodeURIComponent('מגפה')}&inForce=false`,
+    );
+
+    expect(results.map((r) => r.code)).toEqual(['HZ.13.10.1.1']);
   });
 
   it('returns at most `limit` results', async () => {

@@ -22,6 +22,12 @@ const travel: StoredDirective = {
   validTo: null,
   // HTML as ingest stores it: converted and already sanitized.
   html: '<h2>מבוא</h2><p>נוהל הזמנת טיסה</p>',
+  enrichment: {
+    summary: 'ההוראה מסבירה איך מזמינים טיסה לנסיעה בתפקיד',
+    keywords: ['טיסה'],
+    questions: ['איך מזמינים טיסה?'],
+  },
+  enrichmentError: null,
 };
 const expired: StoredDirective = {
   ...travel,
@@ -30,6 +36,8 @@ const expired: StoredDirective = {
   type: 'Temporary Instruction',
   validFrom: '2019-01-01',
   validTo: '2020-12-31',
+  enrichment: null,
+  enrichmentError: 'summary: must be written in Hebrew',
 };
 const unsafe: StoredDirective = {
   ...travel,
@@ -72,12 +80,20 @@ describe('GET /api/directives/:code', () => {
     process.env.DB_PATH = originalDbPath;
   });
 
-  it('returns the Directive with its HTML, In force and official page', async () => {
+  it('returns the Directive with its summary, HTML, In force and official page', async () => {
     const response = await fetch(`${baseUrl}/api/directives/H.13.10.1`);
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      ...travel,
+      code: travel.code,
+      title: travel.title,
+      type: travel.type,
+      chapterPath: travel.chapterPath,
+      edition: travel.edition,
+      validFrom: travel.validFrom,
+      validTo: travel.validTo,
+      summary: 'ההוראה מסבירה איך מזמינים טיסה לנסיעה בתפקיד',
+      html: travel.html,
       inForce: true,
       officialUrl: 'https://takam.mof.gov.il/document/H.13.10.1',
     });
@@ -88,6 +104,13 @@ describe('GET /api/directives/:code', () => {
 
     const directive = (await response.json()) as Directive;
     expect(directive.inForce).toBe(false);
+  });
+
+  it('sends a null summary when enrichment failed', async () => {
+    const response = await fetch(`${baseUrl}/api/directives/HZ.13.10.1.1`);
+
+    const directive = (await response.json()) as Directive;
+    expect(directive.summary).toBeNull();
   });
 
   it('sends only sanitized HTML, even when the stored HTML is unsafe', async () => {

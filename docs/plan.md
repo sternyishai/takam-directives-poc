@@ -60,7 +60,7 @@ data/takam.db   the only store (committed); data/raw/ is gitignored and never se
   - every chunk starts with a context line `code · title › section`
 - **Enrichment:** one call per directive returns `{ summary, keywords[], questions[] }` through `withStructuredOutput(zod)`, with one retry. The output is in Hebrew.
 - **Search:**
-  - MiniSearch over title, keywords, headings, summary and questions, with weights in that order
+  - MiniSearch over title and code, then headings, then the enrichment (keywords, summary and questions), with weights in that order. Issue #9 put all of the enrichment below the headings, which are the Directive's own text.
   - Hebrew normalization: ״/" → ", ignore ו/י, strip one-letter prefixes ה/ב/ל/ו/מ/ש/כ
   - fuzzy matching on whole words
   - the default filter is "in force"

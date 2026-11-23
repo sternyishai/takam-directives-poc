@@ -17,6 +17,15 @@ export interface SearchableDirective {
   headings: string[];
   /** The opening of the Directive's text: the snippet when no heading matched. */
   excerpt: string;
+  /**
+   * The LLM enrichment, in Hebrew (libs/llm): '' and [] when it failed.
+   * Many Directives have no keywords on the site, so this is how they are
+   * found by words that are not in their title or headings.
+   */
+  summary: string;
+  keywords: string[];
+  /** Questions an employee would ask that the Directive answers. */
+  questions: string[];
 }
 
 export interface SearchOptions {
@@ -32,11 +41,13 @@ export interface SearchOptions {
 export const DEFAULT_LIMIT = 20;
 
 /**
- * The fields MiniSearch indexes. MiniSearch indexes text, so the headings are
+ * The fields MiniSearch indexes. MiniSearch indexes text, so each array is
  * joined into one string; `headings` keeps the array for the snippet.
  */
 interface IndexedDirective extends SearchableDirective {
   headingText: string;
+  keywordText: string;
+  questionText: string;
 }
 
 /**
@@ -122,13 +133,30 @@ export class DirectiveSearch {
   constructor(directives: SearchableDirective[]) {
     this.index = new MiniSearch<IndexedDirective>({
       idField: 'code',
-      fields: ['title', 'code', 'headingText'],
+      fields: [
+        'title',
+        'code',
+        'headingText',
+        'keywordText',
+        'summary',
+        'questionText',
+      ],
       tokenize,
       processTerm: normalizeWord,
       searchOptions: {
         // A word in the title or the code counts three times as much as a
         // word in a heading: the title says what the Directive is about.
-        boost: { title: 3, code: 3, headingText: 1 },
+        // The LLM's enrichment counts less than a heading: it is a guess
+        // about the text, and the headings are the text itself. Of the
+        // three, keywords count most because they were chosen for search.
+        boost: {
+          title: 3,
+          code: 3,
+          headingText: 1,
+          keywordText: 0.7,
+          summary: 0.5,
+          questionText: 0.5,
+        },
         fuzzy: typosAllowed,
         // A match with a typo counts 0.2 of an exact one (MiniSearch's
         // default is 0.45), so it stays below an exact match even when the
@@ -142,6 +170,8 @@ export class DirectiveSearch {
       this.index.add({
         ...directive,
         headingText: directive.headings.join('\n'),
+        keywordText: directive.keywords.join('\n'),
+        questionText: directive.questions.join('\n'),
       });
     }
   }
@@ -184,7 +214,8 @@ export class DirectiveSearch {
 
   /**
    * Why a Directive was found: its first heading that contains one of the
-   * matched words, or else the opening of its text.
+   * matched words, or else its summary (which says what the whole Directive
+   * is about), or else, when enrichment failed, the opening of its text.
    */
   private snippetFor(
     directive: SearchableDirective,
@@ -195,6 +226,6 @@ export class DirectiveSearch {
         matchedWords.includes(normalizeWord(word)),
       ),
     );
-    return heading ?? directive.excerpt;
+    return heading ?? (directive.summary || directive.excerpt);
   }
 }

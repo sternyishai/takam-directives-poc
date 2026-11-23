@@ -36,6 +36,10 @@ _Avoid_: Valid, active, isvalid
 A document whose valid-to date has passed.
 _Avoid_: Invalid, archived
 
+**Enrichment** (העשרה):
+What the LLM writes about each Directive at ingest, in Hebrew: a summary, keywords and likely questions. Search indexes all three, and the viewer shows the summary. An **enrichment failure** means two tries in a row gave no usable reply (it did not match the schema, or the call threw); the Directive is still stored, without enrichment.
+_Avoid_: Metadata (the site's own fields), tags
+
 **Citation** (הפניה):
 A numbered reference `[n]` in a chatbot answer that points to a Directive the answer was drawn from.
 _Avoid_: Source, footnote, reference

@@ -8,6 +8,18 @@ export const DIRECTIVE_TYPES = [
 /** Which of the three kinds a Directive is, as the Takam site's API names it. */
 export type DirectiveType = (typeof DIRECTIVE_TYPES)[number];
 
+/**
+ * What the LLM wrote about a Directive at ingest, in Hebrew. Search indexes
+ * all three; the viewer shows the summary.
+ */
+export interface Enrichment {
+  summary: string;
+  /** Words an employee would type to find the Directive. */
+  keywords: string[];
+  /** Questions an employee would ask that the Directive answers. */
+  questions: string[];
+}
+
 /** What GET /api/directives/:code returns: everything the viewer page shows. */
 export interface Directive {
   /** Document code, e.g. "H.13.10.1". */
@@ -24,6 +36,11 @@ export interface Directive {
   validTo: string | null;
   /** Computed from the dates on the day of the request (ADR 0001). */
   inForce: boolean;
+  /**
+   * The LLM's summary (see Enrichment), or null when enrichment failed for
+   * this Directive.
+   */
+  summary: string | null;
   /** The Directive's text, converted from its Word file. */
   html: string;
   /** The Directive's own page on the Takam site. */

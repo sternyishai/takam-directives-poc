@@ -1,3 +1,4 @@
+import { fakeChatModel } from '@takam/llm';
 import { Store } from '@takam/store';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -45,6 +46,20 @@ async function fakeSite(
   };
 }
 
+/** A reply the enrichment schema accepts: a summary, keywords and questions in Hebrew. */
+const validReply = JSON.stringify({
+  summary: 'ההוראה מסדירה את תשלום השכר לעובדי המדינה',
+  keywords: ['שכר', 'תשלום'],
+  questions: ['מתי משולם השכר?'],
+});
+/** A reply the schema rejects: no keywords and no questions. */
+const invalidReply = JSON.stringify({ summary: 'תקציר' });
+
+/** A fake model whose every reply is `reply`, for up to 10 calls (5 Directives with a retry each). */
+const always = (reply: string) => fakeChatModel(Array(10).fill(reply));
+/** A fake model that gives every Directive the same valid enrichment. */
+const alwaysValid = () => always(validReply);
+
 describe('runIngest', () => {
   let folder: string;
   let dbPath: string;
@@ -61,9 +76,19 @@ describe('runIngest', () => {
   it('replaces the store with the Directives it ingested and records the run', async () => {
     const codes = ['H.13.1.1', 'H.13.1.2', 'H.13.1.3'];
 
-    const result = await runIngest(codes, dbPath, await fakeSite(codes));
+    const result = await runIngest(
+      codes,
+      dbPath,
+      await fakeSite(codes),
+      alwaysValid(),
+    );
 
-    expect(result).toEqual({ stored: 3, rejected: 0, replacedStore: true });
+    expect(result).toEqual({
+      stored: 3,
+      rejected: 0,
+      enrichmentFailed: 0,
+      replacedStore: true,
+    });
     const store = new Store(dbPath);
     expect(store.countDirectives()).toBe(3);
     expect(store.findDirective('H.13.1.2')?.title).toBe('הוראה H.13.1.2');
@@ -73,14 +98,19 @@ describe('runIngest', () => {
 
   it('keeps the old store when more than 20% of the files are rejected', async () => {
     const codes = ['H.13.1.1', 'H.13.1.2', 'H.13.1.3', 'H.13.1.4', 'H.13.1.5'];
-    await runIngest(codes, dbPath, await fakeSite(codes)); // the old store: 5
+    await runIngest(codes, dbPath, await fakeSite(codes), alwaysValid()); // the old store: 5
 
     // 2 of 5 rejected is 40%: what the run looks like when the site's
     // firewall answers every download with its own HTML page.
     const site = await fakeSite(codes, ['H.13.1.2', 'H.13.1.4']);
-    const result = await runIngest(codes, dbPath, site);
+    const result = await runIngest(codes, dbPath, site, alwaysValid());
 
-    expect(result).toEqual({ stored: 3, rejected: 2, replacedStore: false });
+    expect(result).toEqual({
+      stored: 3,
+      rejected: 2,
+      enrichmentFailed: 0,
+      replacedStore: false,
+    });
     const store = new Store(dbPath);
     expect(store.countDirectives()).toBe(5);
     store.close();
@@ -91,11 +121,118 @@ describe('runIngest', () => {
     const codes = ['H.13.1.1', 'H.13.1.2', 'H.13.1.3', 'H.13.1.4', 'H.13.1.5'];
 
     const site = await fakeSite(codes, ['H.13.1.3']);
-    const result = await runIngest(codes, dbPath, site);
+    const result = await runIngest(codes, dbPath, site, alwaysValid());
 
-    expect(result).toEqual({ stored: 4, rejected: 1, replacedStore: true });
+    expect(result).toEqual({
+      stored: 4,
+      rejected: 1,
+      enrichmentFailed: 0,
+      replacedStore: true,
+    });
     const store = new Store(dbPath);
     expect(store.countDirectives()).toBe(4);
     store.close();
+  });
+
+  describe('enrichment', () => {
+    it('accepts a valid reply that follows an invalid one', async () => {
+      const codes = ['H.13.1.1'];
+      const model = fakeChatModel([invalidReply, validReply]);
+
+      const result = await runIngest(
+        codes,
+        dbPath,
+        await fakeSite(codes),
+        model,
+      );
+
+      expect(result).toEqual({
+        stored: 1,
+        rejected: 0,
+        enrichmentFailed: 0,
+        replacedStore: true,
+      });
+      const store = new Store(dbPath);
+      const directive = store.findDirective('H.13.1.1');
+      store.close();
+      expect(directive?.enrichment).toEqual({
+        summary: 'ההוראה מסדירה את תשלום השכר לעובדי המדינה',
+        keywords: ['שכר', 'תשלום'],
+        questions: ['מתי משולם השכר?'],
+      });
+      expect(directive?.enrichmentError).toBeNull();
+    });
+
+    it('records two invalid replies as an enrichment failure, and still stores the Directive', async () => {
+      const codes = [
+        'H.13.1.1',
+        'H.13.1.2',
+        'H.13.1.3',
+        'H.13.1.4',
+        'H.13.1.5',
+      ];
+      const notJson = 'this is not JSON'; // the call throws when it is parsed
+      const notHebrew = JSON.stringify({
+        summary: 'Salary payments',
+        keywords: ['salary'],
+        questions: ['When is salary paid?'],
+      });
+      // The first Directive gets two bad replies; the other 4 a valid one each.
+      const model = fakeChatModel([
+        notJson,
+        notHebrew,
+        ...Array(4).fill(validReply),
+      ]);
+
+      const result = await runIngest(
+        codes,
+        dbPath,
+        await fakeSite(codes),
+        model,
+      );
+
+      // 1 of 5 is 20%: not more than 20%, so the store is replaced.
+      expect(result).toEqual({
+        stored: 5,
+        rejected: 0,
+        enrichmentFailed: 1,
+        replacedStore: true,
+      });
+      const store = new Store(dbPath);
+      const directive = store.findDirective('H.13.1.1');
+      store.close();
+      expect(directive?.title).toBe('הוראה H.13.1.1');
+      expect(directive?.enrichment).toBeNull();
+      expect(directive?.enrichmentError).toContain('must be written in Hebrew');
+    });
+
+    it('keeps the old store when more than 20% of the enrichments fail', async () => {
+      const codes = [
+        'H.13.1.1',
+        'H.13.1.2',
+        'H.13.1.3',
+        'H.13.1.4',
+        'H.13.1.5',
+      ];
+      await runIngest(codes, dbPath, await fakeSite(codes), alwaysValid()); // the old store, enriched
+
+      // What a run looks like when the LLM is down or its key has run out.
+      const result = await runIngest(
+        codes,
+        dbPath,
+        await fakeSite(codes),
+        always(invalidReply),
+      );
+
+      expect(result).toEqual({
+        stored: 5,
+        rejected: 0,
+        enrichmentFailed: 5,
+        replacedStore: false,
+      });
+      const store = new Store(dbPath);
+      expect(store.findDirective('H.13.1.1')?.enrichment).not.toBeNull();
+      store.close();
+    });
   });
 });

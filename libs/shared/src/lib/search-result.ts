@@ -12,7 +12,7 @@ export interface SearchResult {
   inForce: boolean;
   /** ISO date, or null when the Directive has no end date. */
   validTo: string | null;
-  /** The passage that matched (a heading), or the opening of the text. */
+  /** The heading that matched, or else the summary, or else the opening of the text. */
   snippet: string;
   /** How well it matched; higher is better. Only the order matters. */
   score: number;
