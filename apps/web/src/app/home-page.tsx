@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import type { HealthReport } from '@takam/shared';
-import { ChatPanel } from './chat-panel';
 import { Search } from './search';
 
 export function HomePage() {
@@ -25,20 +24,18 @@ export function HomePage() {
 
   return (
     <main>
-      {/* "Find a Directive" */}
-      <h1 className="page-title">מציאת הוראה</h1>
-      {/* "Search the full text of the Directives, or ask a question in your own words." */}
-      <p className="page-lead">
-        חיפוש בטקסט המלא של ההוראות, או שאלה במילים שלך.
-      </p>
-      {/* Search on one side, the chat panel on the other (styles.css). */}
-      <div className="home-layout">
+      <div className="page-intro">
         <div>
-          <Search />
-          <p className="store-status">{status}</p>
+          {/* "Find a Directive" */}
+          <h1 className="page-title">מציאת הוראה</h1>
+          {/* "Search the full text of the Directives, or ask the chatbot in the corner." */}
+          <p className="page-lead">
+            חיפוש בטקסט המלא של ההוראות, או שאלה במילים שלך לצ׳אט שבפינה.
+          </p>
         </div>
-        <ChatPanel />
+        <p className="store-status">{status}</p>
       </div>
+      <Search />
     </main>
   );
 }

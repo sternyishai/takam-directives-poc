@@ -48,7 +48,8 @@ const travelCosts: SearchResult = {
 /**
  * Stands in for the API: /api/health answers `health`, and /api/search
  * answers `results` (or only the In-force ones when inForce=true), cut to
- * `limit` when the URL has one. The viewer's /api/directives/… answers 404,
+ * `limit` when the URL has one. An empty query gets `results` too, as the
+ * API answers every Directive. The viewer's /api/directives/… answers 404,
  * so a test can see which code the viewer was opened for.
  */
 function stubApi(results: SearchResult[]) {
@@ -73,9 +74,10 @@ function stubApi(results: SearchResult[]) {
   );
 }
 
-function openHome() {
+/** Opens the app at "/", or at another URL such as "/?q=רכב". */
+function openHome(url = '/') {
   render(
-    <MemoryRouter initialEntries={['/']}>
+    <MemoryRouter initialEntries={[url]}>
       <App />
     </MemoryRouter>,
   );
@@ -86,9 +88,19 @@ function searchFor(query: string) {
   fireEvent.click(screen.getByRole('button', { name: 'חיפוש' }));
 }
 
-/** The calls made to /api/search for the full results, in order. */
+/** The table's URL for a query: the API's largest limit, so all rows show. */
+function tableCall(query: string, inForce = true): string {
+  return `/api/search?q=${encodeURIComponent(query)}&inForce=${inForce}&limit=50`;
+}
+
+/** The calls made to /api/search for the table, in order. */
 function searchCalls(): string[] {
-  return allSearchCalls().filter((url) => !url.includes('limit='));
+  return allSearchCalls().filter((url) => url.endsWith('limit=50'));
+}
+
+/** The calls the dropdown made (limit=3). */
+function quickCalls(): string[] {
+  return allSearchCalls().filter((url) => url.endsWith('limit=3'));
 }
 
 /** Every call made to /api/search, the dropdown's included. */
@@ -113,25 +125,85 @@ function queryDropdown() {
   return screen.queryByRole('list', { name: 'תוצאות מהירות' });
 }
 
+/** The table's rows, without its header row, once they have appeared. */
+async function findRows() {
+  const table = await screen.findByRole('table', { name: 'תוצאות החיפוש' });
+  return within(table).getAllByRole('row').slice(1);
+}
+
 describe('Search on the home page', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('shows the ranked results with chapter path, snippet and Directive type', async () => {
+  it('lists every In-force Directive in the table before any search', async () => {
+    stubApi([carInsurance, travelAbroad, expiredInsurance]);
+    openHome();
+
+    const rows = await findRows();
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining(carInsurance.title),
+      expect.stringContaining(travelAbroad.title),
+    ]);
+    expect(screen.getByText('2 הוראות')).toBeTruthy();
+    expect(searchCalls()).toEqual([tableCall('')]);
+  });
+
+  it('shows each result as a row: code, linked title, snippet, subject, type and In force', async () => {
     stubApi([carInsurance]);
     openHome();
 
     searchFor('רכב');
 
-    const link = await screen.findByRole('link', { name: carInsurance.title });
+    await screen.findByText('תוצאה אחת עבור "רכב"');
+    const [row] = await findRows();
+    const cells = within(row).getAllByRole('cell');
+    expect(cells[0].textContent).toBe('HOD.13.4.1.2');
+    const link = within(cells[1]).getByRole('link', {
+      name: carInsurance.title,
+    });
     expect(link.getAttribute('href')).toBe('/directive/HOD.13.4.1.2');
-    expect(screen.getByText('13 › 13.4 › 13.4.1.2')).toBeTruthy();
-    expect(screen.getByText('השתתפות בביטוח הרכב')).toBeTruthy();
-    expect(screen.getByText('הודעה')).toBeTruthy(); // Directive type: Message
-    expect(searchCalls()).toEqual([
-      `/api/search?q=${encodeURIComponent('רכב')}&inForce=true`,
-    ]);
+    expect(within(cells[1]).getByText('השתתפות בביטוח הרכב')).toBeTruthy();
+    expect(cells[2].textContent).toBe('13.4 נסיעות בתפקיד בארץ');
+    expect(cells[3].textContent).toBe('הודעה'); // Directive type: Message
+    expect(cells[4].textContent).toBe('בתוקף');
+    expect(searchCalls()).toEqual([tableCall(''), tableCall('רכב')]);
+  });
+
+  it('keeps the query in the URL, so opening it again shows the same results', async () => {
+    stubApi([carInsurance]);
+    openHome(`/?q=${encodeURIComponent('רכב')}`);
+
+    await screen.findByText('תוצאה אחת עבור "רכב"');
+    expect((screen.getByRole('searchbox') as HTMLInputElement).value).toBe(
+      'רכב',
+    );
+    expect(searchCalls()).toEqual([tableCall('רכב')]);
+  });
+
+  it('goes back to all the Directives with "show all"', async () => {
+    stubApi([carInsurance]);
+    openHome(`/?q=${encodeURIComponent('רכב')}`);
+    await screen.findByText('תוצאה אחת עבור "רכב"');
+
+    fireEvent.click(screen.getByRole('button', { name: 'הצג את כל ההוראות' }));
+
+    expect(await screen.findByText('הוראה אחת')).toBeTruthy();
+    expect(searchCalls().at(-1)).toBe(tableCall(''));
+    expect((screen.getByRole('searchbox') as HTMLInputElement).value).toBe('');
+  });
+
+  it("returns to the same results from the viewer's back link", async () => {
+    stubApi([carInsurance]);
+    openHome();
+    searchFor('רכב');
+    await screen.findByText('תוצאה אחת עבור "רכב"');
+
+    fireEvent.click(screen.getByRole('link', { name: carInsurance.title }));
+    fireEvent.click(await screen.findByRole('button', { name: '→ חזרה' }));
+
+    expect(await screen.findByText('תוצאה אחת עבור "רכב"')).toBeTruthy();
+    expect(searchCalls().at(-1)).toBe(tableCall('רכב'));
   });
 
   it('searches In-force Directives by default, and expired ones on request, with a red badge', async () => {
@@ -139,7 +211,7 @@ describe('Search on the home page', () => {
     openHome();
 
     searchFor('רכב');
-    await screen.findByRole('link', { name: carInsurance.title });
+    await screen.findByText('תוצאה אחת עבור "רכב"');
     expect(screen.queryByText('לא בתוקף')).toBeNull();
 
     fireEvent.click(
@@ -147,20 +219,20 @@ describe('Search on the home page', () => {
     );
 
     expect(await screen.findByText('לא בתוקף')).toBeTruthy();
-    expect(searchCalls().at(-1)).toContain('inForce=false');
+    expect(searchCalls().at(-1)).toBe(tableCall('רכב', false));
   });
 
   it('changes the list only when a search is submitted', async () => {
     stubApi([carInsurance]);
     openHome();
     searchFor('רכב');
-    await screen.findByRole('link', { name: carInsurance.title });
+    await screen.findByText('תוצאה אחת עבור "רכב"');
 
     fireEvent.change(screen.getByRole('searchbox'), {
       target: { value: 'רכב פרטי' },
     });
 
-    expect(searchCalls()).toHaveLength(1);
+    expect(searchCalls()).toEqual([tableCall(''), tableCall('רכב')]);
     expect(screen.getByRole('link', { name: carInsurance.title })).toBeTruthy();
   });
 
@@ -202,14 +274,14 @@ describe('The quick-search dropdown', () => {
     openHome();
 
     typeInBox('נסיעות');
-    expect(allSearchCalls()).toEqual([]); // not on every keystroke
+    expect(quickCalls()).toEqual([]); // not on every keystroke
 
     const entries = within(await findDropdown()).getAllByRole('listitem');
     expect(entries).toHaveLength(3);
     expect(entries[0].textContent).toContain('HOD.13.4.1.2');
     expect(entries[0].textContent).toContain(carInsurance.title);
     expect(within(entries[0]).getByText('בתוקף')).toBeTruthy();
-    expect(allSearchCalls()).toEqual([
+    expect(quickCalls()).toEqual([
       `/api/search?q=${encodeURIComponent('נסיעות')}&inForce=true&limit=3`,
     ]);
   });
@@ -244,7 +316,8 @@ describe('The quick-search dropdown', () => {
     expect(
       await screen.findByText('לא נמצאה הוראה בקוד H.13.6.1'), // the viewer
     ).toBeTruthy();
-    expect(searchCalls()).toEqual([]); // Enter opened the entry, not the full results
+    // Enter opened the entry: the only table search is the one on arrival.
+    expect(searchCalls()).toEqual([tableCall('')]);
   });
 
   it('hides the matches for the old text as soon as the text changes', async () => {
@@ -280,8 +353,8 @@ describe('The quick-search dropdown', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'חיפוש' }));
 
-    const list = await screen.findByRole('list', { name: 'תוצאות החיפוש' });
-    expect(within(list).getAllByRole('listitem')).toHaveLength(3); // the In-force ones
+    await screen.findByText('3 תוצאות עבור "נסיעות"');
+    expect(await findRows()).toHaveLength(3); // the In-force ones
     expect(queryDropdown()).toBeNull();
   });
 });

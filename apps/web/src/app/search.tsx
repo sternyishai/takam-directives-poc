@@ -1,24 +1,20 @@
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import type { SearchResult } from '@takam/shared';
 import { TYPE_LABELS } from './labels';
 
 /** What the results area is showing. */
 type ResultsState =
-  | { status: 'idle' } // nothing searched yet
   | { status: 'loading' }
   | { status: 'failed' }
   | { status: 'loaded'; results: SearchResult[] };
 
 /**
- * Where a result sits in the hierarchy, as numbers: its Chapters, then its own
- * number from the code. ["13 שכר…", "13.4 נסיעות…"] and "HOD.13.4.1.2" give
- * "13 › 13.4 › 13.4.1.2".
+ * The subject a result belongs to: its closest Chapter, e.g. "13.4 נסיעות
+ * בתפקיד בארץ" from ["13 שכר…", "13.4 נסיעות בתפקיד בארץ"].
  */
-function chapterNumbers(result: SearchResult): string {
-  const chapters = result.chapterPath.map((label) => label.split(' ')[0]);
-  const ownNumber = result.code.replace(/^[A-Z]+\./, ''); // drop "HOD."
-  return [...chapters, ownNumber].join(' › ');
+function subject(result: SearchResult): string {
+  return result.chapterPath[result.chapterPath.length - 1] ?? '';
 }
 
 /** The URL of a Directive's viewer. */
@@ -30,16 +26,30 @@ function viewerPath(result: SearchResult): string {
 const QUICK_SEARCH_DELAY = 150;
 /** How many matches the dropdown shows. */
 const QUICK_RESULTS_LIMIT = 3;
+/**
+ * How many rows the table asks for: the API's largest limit, so the store's
+ * 30 Directives all show.
+ */
+const TABLE_LIMIT = 50;
 
-/** The search box, the quick-search dropdown, the in-force filter and the ranked results. */
+/**
+ * The search box, the quick-search dropdown, the in-force filter and the
+ * results table. Before a search, the table lists every Directive.
+ */
 export function Search() {
-  // What is in the box now, and what was in it at the last submit. Only the
-  // submitted query is searched, so the list stays put while the user types.
-  const [text, setText] = useState('');
-  const [submittedQuery, setSubmittedQuery] = useState('');
+  // The submitted query and the filter live in the URL (/?q=רכב&expired=1),
+  // so the viewer's back link returns to the same results.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const submittedQuery = searchParams.get('q') ?? '';
   // Off by default: only In-force Directives are shown.
-  const [includeExpired, setIncludeExpired] = useState(false);
-  const [state, setState] = useState<ResultsState>({ status: 'idle' });
+  const includeExpired = searchParams.get('expired') === '1';
+  // What is in the box now. Only the submitted query is searched, so the
+  // table stays put while the user types.
+  const [text, setText] = useState(submittedQuery);
+  const [state, setState] = useState<ResultsState>({ status: 'loading' });
+  // When the URL changes without a submit (the site name links to "/"), the
+  // box follows it.
+  useEffect(() => setText(submittedQuery), [submittedQuery]);
   // The dropdown's top matches, and the query they are for. Keeping the query
   // lets the dropdown hide matches for older text while new ones load.
   const [quick, setQuick] = useState<{
@@ -90,10 +100,10 @@ export function Search() {
     };
   }, [text, includeExpired]);
 
-  // Runs after a submit, and when the filter changes (it re-runs the last
-  // submitted query, not what is in the box now).
+  // Runs on the first render (an empty query lists every Directive), after
+  // a submit, and when the filter changes (it re-runs the last submitted
+  // query, not what is in the box now).
   useEffect(() => {
-    if (submittedQuery === '') return;
     // As in DirectivePage: a late answer to an older search is ignored.
     let ignore = false;
     setState({ status: 'loading' });
@@ -101,6 +111,7 @@ export function Search() {
     const params = new URLSearchParams({
       q: submittedQuery,
       inForce: String(!includeExpired),
+      limit: String(TABLE_LIMIT),
     });
     fetch(`/api/search?${params}`)
       .then((response) => {
@@ -143,10 +154,24 @@ export function Search() {
     }
   }
 
+  /** Puts the query and the filter in the URL; the effect above searches. */
+  function showResults(query: string, expired: boolean) {
+    const params: Record<string, string> = {};
+    if (query !== '') params.q = query;
+    if (expired) params.expired = '1';
+    setSearchParams(params);
+  }
+
   function submit(event: FormEvent) {
     event.preventDefault(); // stay on the page instead of reloading it
-    setSubmittedQuery(text.trim());
+    showResults(text.trim(), includeExpired);
     setDropdownOpen(false);
+  }
+
+  /** Empties the box and shows every Directive again. */
+  function clear() {
+    setText('');
+    showResults('', includeExpired);
   }
 
   return (
@@ -178,16 +203,25 @@ export function Search() {
           <input
             type="checkbox"
             checked={includeExpired}
-            onChange={(event) => setIncludeExpired(event.target.checked)}
+            onChange={(event) =>
+              showResults(submittedQuery, event.target.checked)
+            }
           />{' '}
           הצג גם הוראות שאינן בתוקף
         </label>
       </form>
 
-      {state.status === 'loading' && <p>מחפש…</p>}
-      {state.status === 'failed' && <p>השרת אינו זמין</p>}
+      {state.status === 'loading' && <p className="results-note">מחפש…</p>}
+      {state.status === 'failed' && (
+        <p className="results-note">השרת אינו זמין</p>
+      )}
       {state.status === 'loaded' && (
-        <ResultList results={state.results} includeExpired={includeExpired} />
+        <ResultsTable
+          results={state.results}
+          query={submittedQuery}
+          includeExpired={includeExpired}
+          onClear={clear}
+        />
       )}
     </section>
   );
@@ -229,42 +263,88 @@ export function InForceBadge({ inForce }: { inForce: boolean }) {
 }
 
 /**
- * The results, best match first, or a hint when there are none. The hint
+ * The results as a table in its own scroll box, best match first (or in
+ * code order before a search). Above it, how many there are and, after a
+ * search, a button back to all of them. With no results, a hint instead: it
  * suggests ticking the filter only when it is not ticked already.
  */
-function ResultList({
+function ResultsTable({
   results,
+  query,
   includeExpired,
+  onClear,
 }: {
   results: SearchResult[];
+  query: string;
   includeExpired: boolean;
+  onClear: () => void;
 }) {
-  if (results.length === 0) {
-    return includeExpired ? (
-      <p>לא נמצאו הוראות. כדאי לבדוק את האיות.</p>
-    ) : (
-      <p>
-        לא נמצאו הוראות. כדאי לבדוק את האיות, או לסמן "הצג גם הוראות שאינן
-        בתוקף".
-      </p>
-    );
-  }
+  // "N Directives" before a search, "N results for "…"" after one. Hebrew
+  // says "one" after the noun, not "1" before it.
+  const n = results.length;
+  const count =
+    query === ''
+      ? n === 1
+        ? 'הוראה אחת'
+        : `${n} הוראות`
+      : `${n === 1 ? 'תוצאה אחת' : `${n} תוצאות`} עבור "${query}"`;
+
   return (
-    <ol className="results" aria-label="תוצאות החיפוש">
-      {results.map((result) => (
-        <li key={result.code}>
-          <p className="result-meta">
-            <span>{chapterNumbers(result)}</span> ·{' '}
-            <span>{TYPE_LABELS[result.type]}</span>
-            {/* Only the red badge here: a list of green ones would be noise. */}
-            {!result.inForce && <InForceBadge inForce={false} />}
-          </p>
-          <h2 className="result-title">
-            <Link to={viewerPath(result)}>{result.title}</Link>
-          </h2>
-          <p className="result-snippet">{result.snippet}</p>
-        </li>
-      ))}
-    </ol>
+    <div className="results">
+      <div className="results-bar">
+        <p className="results-count">{count}</p>
+        {query !== '' && (
+          <button type="button" className="button-link" onClick={onClear}>
+            הצג את כל ההוראות
+          </button>
+        )}
+      </div>
+
+      {results.length === 0 ? (
+        <p className="results-note">
+          {includeExpired
+            ? 'לא נמצאו הוראות. כדאי לבדוק את האיות.'
+            : 'לא נמצאו הוראות. כדאי לבדוק את האיות, או לסמן "הצג גם הוראות שאינן בתוקף".'}
+        </p>
+      ) : (
+        // tabIndex: the keyboard can reach the box to scroll it.
+        <div
+          className="table-scroll"
+          tabIndex={0}
+          role="region"
+          aria-label="רשימת ההוראות"
+        >
+          <table className="results-table" aria-label="תוצאות החיפוש">
+            <thead>
+              <tr>
+                <th scope="col">קוד</th>
+                <th scope="col">הוראה</th>
+                <th scope="col">נושא</th>
+                <th scope="col">סוג</th>
+                <th scope="col">תוקף</th>
+              </tr>
+            </thead>
+            <tbody>
+              {results.map((result) => (
+                <tr key={result.code}>
+                  <td className="cell-code">{result.code}</td>
+                  <td>
+                    <Link to={viewerPath(result)} className="result-title">
+                      {result.title}
+                    </Link>
+                    <p className="result-snippet">{result.snippet}</p>
+                  </td>
+                  <td className="cell-subject">{subject(result)}</td>
+                  <td className="cell-type">{TYPE_LABELS[result.type]}</td>
+                  <td>
+                    <InForceBadge inForce={result.inForce} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }

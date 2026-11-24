@@ -101,7 +101,12 @@ textarea:focus {
 
 /* The header on every page (app.tsx). */
 .site-header {
-  background: var(--color-primary);
+  background: linear-gradient(
+    120deg,
+    var(--color-primary-hover),
+    var(--color-primary) 60%,
+    #2d5292
+  );
   border-bottom: 3px solid var(--color-accent);
   color: #fff;
 }
@@ -112,11 +117,11 @@ textarea:focus {
   gap: 0.25rem 1rem;
   max-width: var(--page-width);
   margin: 0 auto;
-  padding: 0.9rem 1.25rem;
+  padding: 1rem 1.25rem;
 }
 .site-name {
   color: #fff;
-  font-size: 1.35rem;
+  font-size: 1.4rem;
   font-weight: 700;
   text-decoration: none;
 }
@@ -133,29 +138,47 @@ textarea:focus {
 .page {
   max-width: var(--page-width);
   margin: 0 auto;
-  padding: 1.5rem 1.25rem 3rem;
+  padding: 1.75rem 1.25rem 6rem; /* room at the bottom for the chat button */
 }
 
+/* The title, its lead line and the store's count, on one row. */
+.page-intro {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: end;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1.25rem;
+}
 .page-title {
   margin: 0;
-  font-size: 1.75rem;
+  font-size: 1.85rem;
 }
 .page-lead {
-  margin: 0.25rem 0 1.25rem;
+  margin: 0.25rem 0 0;
   color: var(--color-muted);
 }
-
-/* The home page: the search, and the chat panel beside it (below it on a narrow screen). */
-.home-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 24rem;
-  gap: 1.5rem;
-  align-items: start;
+.store-status {
+  margin: 0;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
 }
-@media (max-width: 56rem) {
-  .home-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
+
+/* A button that looks like a link: "show all the Directives". */
+.button-link {
+  padding: 0;
+  background: none;
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: underline;
+}
+.button-link:hover {
+  background: none;
+  color: var(--color-primary-hover);
 }
 
 /* The search page (/) */
@@ -178,7 +201,7 @@ textarea:focus {
   font-size: 1.05rem;
 }
 .search-form button {
-  padding: 0.75rem 1.5rem;
+  padding: 0.75rem 1.75rem;
 }
 .search-form label {
   color: var(--color-muted);
@@ -191,7 +214,7 @@ textarea:focus {
   position: absolute;
   inset-inline: 0;
   top: calc(100% + 4px);
-  z-index: 1;
+  z-index: 3; /* over the table's sticky header */
   margin: 0;
   padding: 0.25rem;
   list-style: none;
@@ -212,54 +235,128 @@ textarea:focus {
   background: var(--color-primary-soft);
 }
 
-/* The results: one card each. */
+/* The results: a count, then the table. */
 .results {
-  display: grid;
-  gap: 0.75rem;
-  margin: 1rem 0 0;
-  padding: 0;
-  list-style: none;
+  margin-top: 1.25rem;
 }
-.results li {
-  padding: 1rem 1.25rem;
-  border: 1px solid transparent;
+.results-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 1rem;
+  margin-bottom: 0.5rem;
+}
+.results-count {
+  margin: 0;
+  font-weight: 600;
+}
+.results-note {
+  margin-top: 1.25rem;
+  color: var(--color-muted);
+}
+
+/*
+ * The table scrolls inside its own box, so the search box stays in view.
+ * Its header row stays at the top of the box while the rows scroll.
+ */
+.table-scroll {
+  max-height: min(65vh, 44rem);
+  overflow: auto;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-card);
   box-shadow: var(--shadow);
 }
-.results li:hover {
-  border-color: var(--color-border);
+.results-table {
+  width: 100%;
+  min-width: 44rem; /* a narrow screen scrolls sideways instead of squeezing */
+  border-collapse: collapse;
 }
-.result-meta {
-  margin: 0;
+.results-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.7rem 1rem;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: start;
+  white-space: nowrap;
+}
+.results-table td {
+  padding: 0.8rem 1rem;
+  border-top: 1px solid var(--color-border);
+  vertical-align: top;
+}
+.results-table tbody tr:nth-child(even) {
+  background: #fafbfc;
+}
+.results-table tbody tr:hover {
+  background: var(--color-primary-soft);
+}
+.cell-code {
   color: var(--color-muted);
   font-size: 0.85rem;
+  white-space: nowrap;
+  direction: ltr; /* "HOD.13.4.1.2" reads left to right */
+  text-align: end;
+}
+.cell-subject,
+.cell-type {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+.cell-subject {
+  min-width: 11rem;
+}
+.cell-type {
+  white-space: nowrap;
 }
 .result-title {
-  margin: 0.25rem 0 0.4rem;
-  font-size: 1.15rem;
-}
-.result-title a {
+  font-weight: 600;
   text-decoration: none;
 }
-.result-title a:hover {
+/*
+ * The whole row opens the Directive: the title's link is stretched over its
+ * row (an empty ::after placed against the <tr>). It stays one real link,
+ * so the keyboard and screen readers see it as before.
+ */
+.results-table tbody tr {
+  position: relative;
+  cursor: pointer;
+}
+.result-title::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+}
+.results-table tbody tr:hover .result-title {
   text-decoration: underline;
 }
 .result-snippet {
-  margin: 0;
-  color: #3a4452;
-  line-height: 1.6;
+  display: -webkit-box; /* at most two lines of snippet */
+  margin: 0.2rem 0 0;
+  overflow: hidden;
+  color: #4a5463;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-/* The In-force badge: green "in force" (dropdown only) or red "not in force". */
+/* The In-force badge: green "in force" or red "not in force". */
 .badge {
   display: inline-block;
-  margin-inline-start: 0.5rem;
-  padding: 0.05rem 0.55rem;
+  padding: 0.05rem 0.6rem;
   border-radius: 999px; /* a pill */
   font-size: 0.8rem;
   font-weight: 600;
-  vertical-align: 0.1em;
+  white-space: nowrap;
+}
+.quick-results .badge,
+.citations .badge {
+  margin-inline-start: 0.5rem;
 }
 .in-force-badge {
   background: var(--color-in-force-soft);
@@ -270,70 +367,254 @@ textarea:focus {
   color: #fff;
 }
 
-.store-status {
-  margin-top: 1rem;
-  color: var(--color-muted);
-  font-size: 0.85rem;
+/*
+ * The chatbot (chat-widget.tsx): a button fixed in the bottom corner of
+ * every page, and the window it opens above it. In this right-to-left page,
+ * inset-inline-end is the left-hand corner.
+ */
+.chat-widget {
+  position: fixed;
+  inset-inline-end: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 10;
+}
+.chat-launcher {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.8rem 1.2rem;
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgb(31 58 104 / 35%);
+  transition: transform 0.15s;
+}
+.chat-launcher:hover {
+  transform: translateY(-2px);
+}
+.chat-window {
+  display: flex;
+  flex-direction: column;
+  width: min(25rem, calc(100vw - 2.5rem));
+  height: min(36rem, calc(100vh - 2.5rem));
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--color-card);
+  box-shadow: 0 12px 40px rgb(16 24 40 / 25%);
+  animation: chat-open 0.18s ease-out;
+}
+@keyframes chat-open {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}
+/* On a phone, the window fills the screen. */
+@media (max-width: 30rem) {
+  .chat-widget:has(.chat-window) {
+    inset: 0;
+  }
+  .chat-window {
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+  }
+}
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: linear-gradient(120deg, var(--color-primary-hover), #2d5292);
+  color: #fff;
+}
+.chat-header h2 {
+  margin: 0;
+  font-size: 1.02rem;
+}
+.chat-header p {
+  margin: 0;
+  color: rgb(255 255 255 / 75%);
+  font-size: 0.8rem;
+}
+.chat-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-primary-hover);
+  font-weight: 700;
+}
+.chat-close {
+  margin-inline-start: auto;
+  padding: 0.3rem 0.6rem;
+  background: rgb(255 255 255 / 15%);
+  font-size: 0.9rem;
+}
+.chat-close:hover {
+  background: rgb(255 255 255 / 25%);
 }
 
-/* The chat panel: a card that stays in view while the results scroll. */
-.chat-panel {
-  position: sticky;
-  top: 1rem;
-  overflow: hidden;
-  border-radius: var(--radius);
+/* The conversation: it scrolls, newest at the bottom. */
+.chat-messages {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem;
+  overflow-y: auto;
+  background: var(--color-page);
+}
+.bubble {
+  max-width: 88%;
+  padding: 0.6rem 0.85rem;
+  border-radius: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.bubble p {
+  margin: 0;
+}
+/* The user's questions on the start side (right), the bot's on the end side. */
+.bubble-user {
+  align-self: flex-start;
+  border-start-start-radius: 4px;
+  background: var(--color-primary);
+  color: #fff;
+  white-space: pre-line;
+}
+.bubble-bot {
+  align-self: flex-end;
+  border-start-end-radius: 4px;
   background: var(--color-card);
   box-shadow: var(--shadow);
 }
-.chat-panel h2 {
-  margin: 0;
-  padding: 0.85rem 1.25rem;
+.chat-examples {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+.chip {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
   background: var(--color-primary-soft);
   color: var(--color-primary);
-  font-size: 1.05rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-align: start;
 }
-.chat-panel form,
-.chat-panel > p,
-.chat-answer {
-  margin: 0;
-  padding: 1rem 1.25rem 0;
+.chip:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
 }
-.chat-panel > :last-child {
-  padding-bottom: 1.25rem;
+/* The three dots while the bot looks for an answer. */
+.typing {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-muted);
+  font-size: 0.9rem;
 }
-.chat-panel form {
-  display: grid;
-  gap: 0.6rem;
+.dots {
+  display: inline-flex;
+  gap: 3px;
 }
-.chat-panel textarea {
-  resize: vertical;
+.dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-muted);
+  animation: dot 1s infinite ease-in-out;
 }
-.chat-panel form button {
-  justify-self: start; /* on the right, under the box */
+.dots span:nth-child(2) {
+  animation-delay: 0.15s;
 }
-.chat-answer {
-  line-height: 1.7;
+.dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes dot {
+  50% {
+    opacity: 0.3;
+    transform: translateY(-3px);
+  }
 }
 /* Keep the answer's line breaks: the model writes one point per line. */
 .chat-answer > p:first-child {
-  margin-top: 0;
   white-space: pre-line;
 }
 .citations {
   display: grid;
-  gap: 0.4rem;
-  margin: 0 0 0.75rem;
+  gap: 0.35rem;
+  margin: 0.6rem 0 0.4rem;
   padding: 0;
   list-style: none;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 .citations li {
-  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.4rem 0.6rem;
   border-radius: var(--radius-small);
   background: var(--color-page);
 }
+.citation-number {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.citations .badge {
+  margin-inline-start: 0;
+}
 .chat-unavailable {
   color: var(--color-expired);
+}
+/* The question box and the send button, at the bottom of the window. */
+.chat-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+  padding: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+.chat-form textarea {
+  max-height: 8rem;
+  resize: none;
+  field-sizing: content; /* grows with the question, where supported */
+}
+
+/* "Back", above the viewer: a quiet link, the same as a button or a link. */
+.back-link {
+  display: inline-block;
+  margin-bottom: 0.75rem;
+  padding: 0.35rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-card);
+  color: var(--color-primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.back-link:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+/* Lines the back link up with the article under it. */
+.page > .back-link {
+  margin-inline-start: max(0px, calc((100% - 52rem) / 2));
 }
 
 /* The Directive viewer (/directive/:code) */
