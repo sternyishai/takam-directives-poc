@@ -5,9 +5,10 @@
 //
 // The ingest CLI: `npm run ingest`. It ingests every Document code listed in
 // apps/ingest/ingest.config.json into a new store (ingest.ts has the steps).
-// It needs GOOGLE_API_KEY and LLM_MODEL for enrichment, read from .env.
+// It needs GOOGLE_API_KEY, LLM_MODEL (enrichment) and EMBEDDING_MODEL (the
+// chunks' vectors), read from .env.
 
-import { chatModelFromEnv } from '@takam/llm';
+import { chatModelFromEnv, embeddingModelFromEnv } from '@takam/llm';
 import { DEFAULT_DB_PATH } from '@takam/store';
 import { existsSync, readFileSync } from 'node:fs';
 import { runIngest } from './ingest';
@@ -39,6 +40,7 @@ async function main() {
       downloadFile,
     },
     chatModelFromEnv(),
+    embeddingModelFromEnv('chunk'),
   );
 
   // A non-zero exit code tells scripts (and CI) that the run failed and the

@@ -24,8 +24,11 @@ const MAX_ATTEMPTS = 2;
 /** What answerQuestion needs: a chat model, and a way to find passages. */
 export interface ChatDependencies {
   model: ChatModel;
-  /** The passages for a question, best first (the API searches the chunks). */
-  retrieve: (question: string) => Passage[];
+  /**
+   * The passages for a question, best first (the API searches the chunks,
+   * and may first ask the embedding model for the question's vector).
+   */
+  retrieve: (question: string) => Passage[] | Promise<Passage[]>;
 }
 
 /** The instructions, in Hebrew, so the model answers in Hebrew. */
@@ -97,8 +100,9 @@ function numberedPassages(passages: Passage[]): string {
 /** Builds the graph for one model and one retriever. */
 function buildChatGraph({ model, retrieve }: ChatDependencies) {
   /** Finds the passages, and keeps the best MAX_PASSAGES. */
-  function retrieveStep(state: State) {
-    return { passages: retrieve(state.question).slice(0, MAX_PASSAGES) };
+  async function retrieveStep(state: State) {
+    const passages = await retrieve(state.question);
+    return { passages: passages.slice(0, MAX_PASSAGES) };
   }
 
   /**

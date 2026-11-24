@@ -25,9 +25,10 @@ export const SCHEMA = `
   -- The Directives' text in chunks, for the chatbot's retrieval. Each chunk
   -- starts with its context line, "code · title › section".
   CREATE TABLE IF NOT EXISTS chunks (
-    code     TEXT NOT NULL REFERENCES directives (code),
-    position INTEGER NOT NULL,      -- 0 for the Directive's first chunk, then 1, 2…
-    text     TEXT NOT NULL,
+    code      TEXT NOT NULL REFERENCES directives (code),
+    position  INTEGER NOT NULL,     -- 0 for the Directive's first chunk, then 1, 2…
+    text      TEXT NOT NULL,
+    embedding TEXT,                 -- JSON array of numbers: the chunk's vector; NULL if none
     PRIMARY KEY (code, position)
   );
 

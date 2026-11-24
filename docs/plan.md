@@ -64,7 +64,7 @@ data/takam.db   the only store (committed); data/raw/ is gitignored and never se
   - Hebrew normalization: ״/" → ", ignore ו/י, strip one-letter prefixes ה/ב/ל/ו/מ/ש/כ
   - fuzzy matching on whole words
   - the default filter is "in force"
-- **Chat** is a LangGraph: retrieve (MiniSearch over the chunks, top 5 passages; issue #10 dropped the embedding cosine) → generate (`[n]` citations) → checkCitations. On a bad citation it retries once, then answers "לא מצאתי תשובה בהוראות" (I didn't find an answer in the directives). Each citation links to `/directive/:code`, and expired citations are flagged (ADR 0002).
+- **Chat** is a LangGraph: retrieve (MiniSearch over the chunks plus the chunks closest by embedding cosine, merged, top 5 passages; issue #11) → generate (`[n]` citations) → checkCitations. On a bad citation it retries once, then answers "לא מצאתי תשובה בהוראות" (I didn't find an answer in the directives). Each citation links to `/directive/:code`, and expired citations are flagged (ADR 0002).
 
 ## API and pages
 - **API:**

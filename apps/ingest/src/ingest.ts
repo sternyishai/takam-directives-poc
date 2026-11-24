@@ -1,8 +1,12 @@
-// One ingest run: fetch → security gate → convert → chunk → enrich → a new store.
-// main.ts reads the config and calls runIngest with the real site; the tests
-// call it with a fake one, and with LangChain's fake chat model.
+// One ingest run: fetch → security gate → convert → enrich → chunk → embed → a new store.
+// main.ts reads the config and calls runIngest with the real site and Gemini;
+// the tests call it with a fake site and fake models.
 
-import { enrichDirective, type ChatModel } from '@takam/llm';
+import {
+  enrichDirective,
+  type ChatModel,
+  type EmbeddingModel,
+} from '@takam/llm';
 import { htmlToText } from '@takam/sanitize';
 import { DIRECTIVE_TYPES, type DirectiveType } from '@takam/shared';
 import { Store } from '@takam/store';
@@ -71,12 +75,16 @@ function isDirectiveType(type: string): type is DirectiveType {
  * if more than 20% of the enrichments fail, the LLM is down or its key has
  * run out, and the old (enriched) store is better than the new one, so it is
  * kept, the same way as for rejected files.
+ *
+ * Each chunk is embedded by `embeddings`, for the chatbot's hybrid
+ * retrieval. A Directive whose chunks get no vectors is rejected.
  */
 export async function runIngest(
   codes: string[],
   dbPath: string,
   site: TakamSite,
   model: ChatModel,
+  embeddings: EmbeddingModel,
 ): Promise<IngestResult> {
   const tempPath = `${dbPath}.tmp`;
   rmSync(tempPath, { force: true }); // left over from a run that crashed
@@ -93,6 +101,7 @@ export async function runIngest(
         documents,
         site,
         model,
+        embeddings,
         store,
         rawFolder,
       );
@@ -134,6 +143,7 @@ async function ingestDirective(
   documents: SiteDocument[],
   site: TakamSite,
   model: ChatModel,
+  embeddings: EmbeddingModel,
   store: Store,
   rawFolder: string,
 ): Promise<boolean> {
@@ -169,6 +179,16 @@ async function ingestDirective(
     console.error(`  ${code}: enrichment failed: ${enrichment.error}`);
   }
 
+  // The chatbot answers from these (chunk.ts). Embedded before anything is
+  // saved, so a Directive whose vectors fail is not stored at all.
+  const texts = chunkDirective({ code, title: document.name, html });
+  const vectors = await embeddings.embedDocuments(texts);
+  // LangChain's Gemini class gives an empty vector instead of throwing when
+  // a batch fails, so every vector is checked.
+  if (vectors.length !== texts.length || vectors.some((v) => v.length === 0)) {
+    throw new Error('the embedding model gave no vector for a chunk');
+  }
+
   store.saveDirective({
     code,
     title: document.name,
@@ -181,7 +201,9 @@ async function ingestDirective(
     enrichment: enrichment.ok ? enrichment.enrichment : null,
     enrichmentError: enrichment.ok ? null : enrichment.error,
   });
-  // The chatbot answers from these (chunk.ts).
-  store.saveChunks(code, chunkDirective({ code, title: document.name, html }));
+  store.saveChunks(
+    code,
+    texts.map((text, i) => ({ text, embedding: vectors[i] })),
+  );
   return enrichment.ok;
 }
