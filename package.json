@@ -8,6 +8,7 @@
     "dev": "nx run-many -t serve -p api web",
     "ingest": "tsx apps/ingest/src/main.ts",
     "export": "tsx apps/ingest/src/export.ts",
+    "bench:search": "node --expose-gc --import tsx scripts/search-scale.ts",
     "lint": "nx run-many -t lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
