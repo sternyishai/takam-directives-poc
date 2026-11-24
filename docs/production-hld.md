@@ -4,7 +4,11 @@ How the POC would run inside a government organization. Nothing here is built. T
 
 ![Production architecture](diagrams/production-architecture.png)
 
-Source: [`diagrams/production-architecture.excalidraw`](diagrams/production-architecture.excalidraw). The ingest pipeline and the chat flow are the same as in the POC: [`diagrams/ingest-pipeline.png`](diagrams/ingest-pipeline.png) and [`diagrams/chat-flow.png`](diagrams/chat-flow.png).
+Source: [`diagrams/production-architecture.excalidraw`](diagrams/production-architecture.excalidraw). The dashed search engine is not part of the first production version: section 7 says when it is needed. The flows stay as they are in the POC:
+- [the ingest pipeline](diagrams/ingest-pipeline.png)
+- [a search request, library by library](diagrams/search-flow.png)
+- [a chat request, library by library](diagrams/chat-request-flow.png)
+- [the chat as a LangGraph](diagrams/chat-flow.png)
 
 ## 1. Runtime
 
@@ -16,7 +20,7 @@ The organization's container platform (OpenShift or another Kubernetes) runs thr
 | `apps/api` | a Deployment with 2 or more pods behind a Service | It reads Postgres instead of SQLite. A readiness probe on `/api/health` keeps a pod out of the Service until its search index is built. |
 | `apps/ingest` | a CronJob, nightly (for example 02:00), `concurrencyPolicy: Forbid` | It writes to Postgres and the object store instead of `data/takam.db`. It runs with no one watching, so it reports through metrics and alerts instead of printing to a terminal. |
 
-**Postgres + pgvector** (the organization's managed Postgres) replaces SQLite (ADR 0003 names it as the production store). The tables are the same: `directives` (metadata, enrichment, HTML), `chunks` (text and embedding, now a `vector(768)` column with an HNSW index), `search_log`, plus an `ingest_runs` table (start, end, counts, and whether the run was swapped in). The API still keeps MiniSearch in memory for the Directive search: building it for every Directive takes seconds and a few tens of MB. The chat's vector search moves into Postgres (`ORDER BY embedding <=> $1 LIMIT 5`), because comparing the question with every chunk in TypeScript stops being cheap at a few hundred thousand chunks.
+**Postgres + pgvector** (the organization's managed Postgres) replaces SQLite (ADR 0003 names it as the production store). The tables are the same: `directives` (metadata, enrichment, HTML), `chunks` (text and embedding, now a `vector(768)` column with an HNSW index), `search_log`, plus an `ingest_runs` table (start, end, counts, and whether the run was swapped in). The API still keeps MiniSearch in memory for the Directive search. For all of Takam it builds in about 0.1 s and takes about 16 MB per pod (measured; see section 7). The chat's vector search moves into Postgres (`ORDER BY embedding <=> $1 LIMIT 5`). In memory it would still take only about 15 ms for 7,000 chunks, but in Postgres every pod shares one copy, and the index is updated when the swap happens.
 
 **The atomic swap stays, in a form that suits Postgres.** The POC writes `takam.db.tmp` and renames it. In production, each run writes into a new schema (`ingest_20261124`). When the run passes the 20% rules, one transaction points the `current` view (or a one-row `active_run` table the API reads) at the new schema. The API's pods pick it up on their next index rebuild (a background refresh every few minutes, or a rolling restart that the CronJob triggers). A failed run never touches what the API reads. Old schemas are dropped after 7 days, so a rollback to last night is one `UPDATE`.
 
@@ -94,4 +98,18 @@ The API and ingest export Prometheus metrics, and logs go to the cluster's log s
   - embeddings: only for new Editions, in batches
   - chat: SSO identifies the user, so a per-user rate limit (for example 30 questions an hour) and a daily token budget for the whole service apply. Past the budget, `/api/chat` answers 503 with a clear message, and search keeps working, as it does in the POC when there is no key.
   - a cache of answers to the same normalized question for one ingest run, so the 20 people who ask about the per-diem rate on the same day cost one call
+- **Does fuzzy search need a database or a search engine?** Not at Takam's size, but it will past about 5,000 Directives. The numbers come from `npm run bench:search` ([`scripts/search-scale.ts`](../scripts/search-scale.ts)). The script copies the 30 stored Directives up to each size and gives every copy 40 words of its own, so the number of distinct words grows with the number of Directives, as it would with real text. Fuzzy matching costs more as the number of distinct words grows. Each search is the average of 6 queries (a typo, a variant spelling, a code, a phrase), run on a laptop (Apple Silicon, Node 26):
+
+  | Directives in the index | What that would be | Build (each pod, at startup or after a swap) | Memory per pod | One search |
+  |---|---|---|---|---|
+  | 30 | the POC | 8 ms | 2 MB | 0.4 ms |
+  | 550 | all of Takam's Directives | 0.1 s | 16 MB | 5 ms |
+  | 5,000 | every Edition, or every Document with its attachments | 1.1 s | 125 MB | 45 ms |
+  | 50,000 | many sites like Takam | 14 s | about 1 GB | 480 ms |
+
+  The chat's passage search grows the same way: 3 ms for the POC's 376 chunks, 15 ms for 7,000, and 220 ms for 50,000.
+  - **Up to a few thousand Directives (all of Takam): no search engine.** MiniSearch in each API pod is the simplest thing that is fast enough. The index is rebuilt from Postgres after each swap, and our Hebrew rules (`normalizeWord`, `typosAllowed`) stay as they are and as they are tested.
+  - **Past about 5,000 Directives, or when a search must be under 50 ms:** add a search engine. Every pod would otherwise hold and rebuild its own large copy, and the time grows with the size. This is the dashed box in the production diagram: **OpenSearch** (or Elasticsearch, whichever the organization runs). It is an index on disk, shared by all pods. Its `fuzziness` is the same edit distance on whole words as our `typosAllowed`: `fuzziness: "AUTO:4,8"` allows no typo up to 3 letters, one from 4, and two from 8, which is our rule exactly. (A word with a digit still has to match exactly; the API sends it with `fuzziness: 0`.) Field weights become `boost`, In force becomes a date-range filter, and ingest writes a new index and moves an alias to it, which is the same atomic swap.
+  - **Hebrew stays in our code.** OpenSearch has no analyzer that applies our rules (prefix letters, ו/י, quotes, final letters). So ingest indexes the words as `normalizeWord` returns them, with a plain whitespace analyzer, and the API normalizes the query the same way. One function, already tested, decides what matches.
+  - **Why not fuzzy search in Postgres:** Postgres full-text search has no Hebrew dictionary. `pg_trgm` measures how many three-letter pieces two words share, not how many letters differ. A 3–4 letter Hebrew word has only a few such pieces, so `pg_trgm` either misses a one-letter typo or matches an unrelated short word (`רכב` car, `רכז` coordinator). Postgres stays the store; it is not the fuzzy search.
 - **More users:** the API is stateless apart from its in-memory index, so it scales by adding pods (a HorizontalPodAutoscaler on CPU). Search is in memory and fast. Chat time is the LLM's, so it scales with the provider's quota, not with our pods.

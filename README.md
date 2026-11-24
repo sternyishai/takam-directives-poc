@@ -38,7 +38,11 @@ The POC covers 30 Directives (in [`apps/ingest/ingest.config.json`](apps/ingest/
 ### The technical design
 ![POC architecture](docs/diagrams/poc-architecture.png)
 
-Source: [`docs/diagrams/poc-architecture.excalidraw`](docs/diagrams/poc-architecture.excalidraw). Each of the four diagrams in [`docs/diagrams/`](docs/diagrams/) is a PNG with its Excalidraw source beside it, which opens at https://excalidraw.com for editing.
+Source: [`docs/diagrams/poc-architecture.excalidraw`](docs/diagrams/poc-architecture.excalidraw). Each diagram in [`docs/diagrams/`](docs/diagrams/) is a PNG with its Excalidraw source beside it, which opens at https://excalidraw.com for editing.
+
+How a request goes through the components, and which library does each step:
+- [Search flow](docs/diagrams/search-flow.png): React → NestJS → `libs/search` (the Hebrew word rules, then MiniSearch) → `libs/shared` (In force) → `libs/store` (the search log). It also shows how the index is built when the API starts.
+- [Chat flow](docs/diagrams/chat-request-flow.png): React → NestJS → the LangGraph in `libs/llm`. Its retrieve step embeds the question with LangChain and Gemini, then searches the chunks with MiniSearch and cosine similarity. Generate (Gemini) and the Citation check (our TypeScript) follow. The [LangGraph diagram](docs/diagrams/chat-flow.png) shows the retry and the "not found" paths.
 
 One Nx monorepo, in TypeScript throughout:
 
@@ -88,6 +92,7 @@ With an empty store it says "במאגר 0 הוראות". You can also run one si
 | `npm run api` | the NestJS API (port 3456, or `PORT`) |
 | `npm run ingest` | downloads, checks, converts, chunks and enriches the 30 Directives in `apps/ingest/ingest.config.json` into a new store (needs `GOOGLE_API_KEY`) |
 | `npm run export` | writes each Directive in the store, enrichment included, to `data/export/<code>.json`, to read without SQLite |
+| `npm run bench:search` | times the in-memory search at production sizes, from 30 up to 50,000 Directives (see the HLD, section 7). Reads a copy of the store and changes nothing |
 | `npm run lint` | ESLint on every project |
 | `npm run format:check` | Prettier: fails if any code file is not formatted (`npm run format` fixes them) |
 | `npm run typecheck` | TypeScript on every project |
@@ -325,6 +330,7 @@ Prettier checks code and config only. The Markdown docs are hand-written and kep
 - **Attachments, forms and tenders:** they are not Directives, and some are not Word files.
 - **Fixing the site's own tree and mobile layout:** that is a redesign of the site, not this tool.
 - **A virus scan and a vector database:** production needs the scan, and it is in the HLD. 376 chunks don't need a vector database.
+- **A search engine (OpenSearch):** measured, it isn't needed for all of Takam. 550 Directives take 5 ms per search and 16 MB in memory. It is needed past about 5,000 Directives, where a search takes 45 ms and every API pod holds 125 MB. It is in the production diagram for that case ([HLD § 7](docs/production-hld.md#7-scale)).
 - **Full accessibility for the dropdown,** and **the other chapters.** The POC covers 30 Directives, and the HLD explains how to cover all of them.
 
 **One significant change that would improve maintainability and scalability:** move the store from one SQLite file to **Postgres with pgvector, with incremental ingest keyed by Edition number.**
