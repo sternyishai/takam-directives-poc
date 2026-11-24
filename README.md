@@ -174,6 +174,7 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
 ### Decisions made while building
 - **Nx with npm workspaces.** Each app and lib is an npm workspace package (`@takam/web`, `@takam/shared` and so on), and Nx infers the `lint`, `test`, `typecheck` and `build` targets from the config files. `nx sync` keeps the TypeScript project references in step.
 - **Health is tested over real HTTP.** The API test starts the whole Nest app on a random port with an in-memory SQLite database (`DB_PATH=:memory:`) and calls it with `fetch`, so it checks the route, the module wiring and the schema together.
+- **The navbar's docs pages read the repo's own files** (`apps/web/src/app/repo-docs.ts`). Vite's `import.meta.glob` finds every PNG in `docs/diagrams/`, every video in `docs/videos/` and every Hebrew ADR in `docs/adr/he/` when the app is built, so a new file shows up with no code change and the API is not involved. `react-markdown` turns an ADR into HTML without `dangerouslySetInnerHTML`.
 - **The web test fakes only `fetch`.** The component is rendered for real; only the network call to the API is replaced.
 - **The schema is created on startup** with `CREATE TABLE IF NOT EXISTS`, so a missing or empty DB file is never an error. Later milestones add columns and tables.
 - **`data/takam.db` is committed** (ADR 0003), so a clean clone runs the viewer and the tests with no network. Each ingest run builds a whole new store, so a schema change only needs a new run.
