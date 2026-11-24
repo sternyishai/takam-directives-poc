@@ -25,7 +25,12 @@ export function HomePage() {
 
   return (
     <main>
-      <h1>הוראות תכ"ם</h1>
+      {/* "Find a Directive" */}
+      <h1 className="page-title">מציאת הוראה</h1>
+      {/* "Search the full text of the Directives, or ask a question in your own words." */}
+      <p className="page-lead">
+        חיפוש בטקסט המלא של ההוראות, או שאלה במילים שלך.
+      </p>
       {/* Search on one side, the chat panel on the other (styles.css). */}
       <div className="home-layout">
         <div>

@@ -86,24 +86,29 @@ export function DirectivePage() {
         </section>
       )}
 
-      <p>{directive.chapterPath.join(' › ')}</p>
+      {/* The Directive's place, Edition, dates and source, in one box. */}
+      <div className="directive-meta">
+        <p className="directive-chapter">{directive.chapterPath.join(' › ')}</p>
 
-      <dl className="directive-details">
-        <dt>מהדורה</dt>
-        <dd>{directive.edition}</dd>
-        <dt>בתוקף מתאריך</dt>
-        <dd>{directive.validFrom ? formatDate(directive.validFrom) : '—'}</dd>
-        <dt>בתוקף עד תאריך</dt>
-        <dd>
-          {directive.validTo ? formatDate(directive.validTo) : 'ללא תאריך סיום'}
-        </dd>
-      </dl>
+        <dl className="directive-details">
+          <dt>מהדורה</dt>
+          <dd>{directive.edition}</dd>
+          <dt>בתוקף מתאריך</dt>
+          <dd>{directive.validFrom ? formatDate(directive.validFrom) : '—'}</dd>
+          <dt>בתוקף עד תאריך</dt>
+          <dd>
+            {directive.validTo
+              ? formatDate(directive.validTo)
+              : 'ללא תאריך סיום'}
+          </dd>
+        </dl>
 
-      <p>
-        <a href={directive.officialUrl} target="_blank" rel="noreferrer">
-          המקור באתר תכ"ם
-        </a>
-      </p>
+        <p>
+          <a href={directive.officialUrl} target="_blank" rel="noreferrer">
+            המקור באתר תכ"ם
+          </a>
+        </p>
+      </div>
 
       {/*
         The HTML was converted by ingest from the Directive's Word file. React

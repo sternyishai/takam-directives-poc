@@ -76,7 +76,7 @@ The committed store (`data/takam.db`) already holds the 30 Directives, so everyt
 
 ```bash
 cp .env.example .env    # then put your Gemini key in GOOGLE_API_KEY (search works without it)
-npm run dev             # the API on http://localhost:3000/api and the web app on http://localhost:4200
+npm run dev             # the API on http://localhost:3456/api and the web app on http://localhost:4200
 ```
 
 Open http://localhost:4200. The page shows how many directives are in the store.
@@ -84,8 +84,8 @@ With an empty store it says "במאגר 0 הוראות". You can also run one si
 
 | Command | What it does |
 |---|---|
-| `npm run web` | the web app (Vite dev server, port 4200; `/api` is proxied to port 3000) |
-| `npm run api` | the NestJS API (port 3000, or `PORT`) |
+| `npm run web` | the web app (Vite dev server, port 4200; `/api` is proxied to port 3456) |
+| `npm run api` | the NestJS API (port 3456, or `PORT`) |
 | `npm run ingest` | downloads, checks, converts, chunks and enriches the 30 Directives in `apps/ingest/ingest.config.json` into a new store (needs `GOOGLE_API_KEY`) |
 | `npm run export` | writes each Directive in the store, enrichment included, to `data/export/<code>.json`, to read without SQLite |
 | `npm run lint` | ESLint on every project |
@@ -94,9 +94,9 @@ With an empty store it says "במאגר 0 הוראות". You can also run one si
 | `npm test` | every test project (Vitest for the libs, web and ingest; Jest for the API) |
 | `npm run build` | builds every project |
 
-`curl http://localhost:3000/api/health` returns `{"directives":30,"indexSize":30,"lastIngest":"…"}` against the committed store.
+`curl http://localhost:3456/api/health` returns `{"directives":30,"indexSize":30,"lastIngest":"…"}` against the committed store.
 The API opens `data/takam.db` (set `DB_PATH` to use another file). If the file does not exist, the API creates it with an empty schema.
-If the API runs on another port (`PORT=3456 npm run api`), start the web app with `API_URL=http://localhost:3456 npm run web` so its `/api` proxy finds it.
+If the API runs on another port (`PORT=4000 npm run api`), start the web app with `API_URL=http://localhost:4000 npm run web` so its `/api` proxy finds it.
 
 ### Search
 ```bash
@@ -258,6 +258,14 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
   - **The merge takes the two lists in turn**: the best keyword hit, the closest chunk, the second keyword hit, the second closest, and so on. A chunk already taken is skipped, so it never appears twice. The chat keeps the first 5. Taking turns gives both methods a share of the five places without comparing a MiniSearch score with a cosine, which are on different scales. When both find the same chunk it is taken once, and the next one takes the freed place. The vector side gives its 5 closest chunks, so with no keyword hit the model still gets 5 passages and says itself when they do not answer.
   - **Search stays keyword-only and needs no key.** Only the chat embeds the question. The embedding model is its own Nest provider (`EMBEDDING_MODEL`): `null` when `GOOGLE_API_KEY` or `EMBEDDING_MODEL` is missing, and then the chat retrieves by words only. An embedding call that throws, or that gives an empty vector, gives a 503, like a failing chat model; the chat does not fall back to words, so a broken key shows.
   - **The committed store got its vectors without a new ingest**, as it got its chunks in issue #10. The issue asked for a re-run, and the code supports one: two full runs were tried, and both stored all 30 Directives with all 376 vectors. But each also rewrote the enrichment. In both runs HOD.13.4.1.2 lost its enrichment, because Gemini listed the insurer "We-Sure" as a keyword and every keyword must have a Hebrew letter (issue #9's rule). The summary-only words the search tests use ("עלויות", "ייעודיות") were also gone. So the old store was kept, the `embedding` column was added to it (`ALTER TABLE`, because `CREATE TABLE IF NOT EXISTS` does not add a column to a table that exists), and its chunks were embedded with the same model and settings ingest uses (`embeddingModelFromEnv('chunk')`, every vector checked). The next full ingest gives the same columns. Whether a Latin brand name should be allowed as a keyword is left for a later issue.
+- **The look** (issue #30). Plain CSS in `apps/web/src/styles.css`, with no UI library, so every rule can be read and explained.
+  - **The colours, corners and shadows are named once** as CSS custom properties (`--color-primary` and so on) at the top of the file, and every rule uses those names. A deep blue for the header, links and buttons, a thin gold line under the header, white cards on a light grey page, and red kept only for "not in force". It does not copy the official site's branding.
+  - **The system font** (`system-ui`): every system's own font has good Hebrew letters, and the API's Content-Security-Policy allows no fonts from other sites.
+  - **A header on every page** (`app.tsx`), whose name links back to search. The viewer had no way back before. The home page's heading is now "מציאת הוראה" (find a Directive), so the name is not shown twice.
+  - **The chat panel is `position: sticky`**, so it stays in view while the results scroll. On a narrow screen it moves below the results, as before.
+  - **The Directive text's numbered lists showed a bullet and a number.** Word's numbering arrives from the converter as `<ul><li><ol>`, a bullet list around the numbered one. The CSS hides the outer bullet with `:has()` instead of changing the stored HTML, so a new ingest is not needed.
+  - **Wide rate tables scroll on their own**, inside the text, so the page never scrolls sideways. It was checked at 390px wide.
+  - **The keyboard focus ring is gold and 3px**, on every link, button and box, so it is easy to see on both white and blue.
 - **Vitest runs once, not in watch mode** (`testMode: "run"` in `nx.json`), so `npm test` finishes.
 
 ### Tests and CI
