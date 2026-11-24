@@ -41,6 +41,12 @@ export function ChatWidget() {
   const endRef = useRef<HTMLDivElement>(null);
   // The question box, to put the cursor in when the window opens.
   const boxRef = useRef<HTMLTextAreaElement>(null);
+  // Which conversation this is: "new conversation" adds 1. A ref, not
+  // state, because changing it needs no new render; send() reads it after
+  // its await to tell whether the conversation it asked in is still shown.
+  const conversationRef = useRef(0);
+  // Something to clear: a message, a typed question, or an answer on its way.
+  const hasConversation = messages.length > 0 || question !== '' || waiting;
 
   useEffect(() => {
     // scrollIntoView is missing in the tests' fake browser (jsdom): hence ?.
@@ -54,6 +60,7 @@ export function ChatWidget() {
   async function send(typed: string) {
     const text = typed.trim();
     if (text === '' || waiting) return;
+    const conversation = conversationRef.current;
     setQuestion('');
     // The functional form: each update sees the one before it, even though
     // two of them happen in this one function.
@@ -72,8 +79,21 @@ export function ChatWidget() {
       // Whatever went wrong, the user's next step is the same: use search.
       reply = { from: 'bot', unavailable: true };
     }
+    // A new conversation started while we waited: this answer belongs to
+    // the old one, so it is dropped (and newConversation already stopped
+    // the waiting).
+    if (conversationRef.current !== conversation) return;
     setMessages((before) => [...before, reply]);
     setWaiting(false);
+  }
+
+  /** Empties the window: the greeting and the example questions show again. */
+  function newConversation() {
+    conversationRef.current += 1;
+    setMessages([]);
+    setQuestion('');
+    setWaiting(false);
+    boxRef.current?.focus();
   }
 
   function submit(event: FormEvent) {
@@ -107,14 +127,26 @@ export function ChatWidget() {
               {/* "Answers from the Directives, with references" */}
               <p>תשובות מתוך ההוראות, עם הפניות</p>
             </div>
-            <button
-              type="button"
-              className="chat-close"
-              aria-label="סגירת הצ׳אט"
-              onClick={() => setOpen(false)}
-            >
-              ✕
-            </button>
+            <div className="chat-header-actions">
+              {hasConversation && (
+                // "New conversation"
+                <button
+                  type="button"
+                  className="chat-header-button"
+                  onClick={newConversation}
+                >
+                  <span aria-hidden="true">＋</span> שיחה חדשה
+                </button>
+              )}
+              <button
+                type="button"
+                className="chat-header-button"
+                aria-label="סגירת הצ׳אט"
+                onClick={() => setOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
           </header>
 
           <div className="chat-messages">

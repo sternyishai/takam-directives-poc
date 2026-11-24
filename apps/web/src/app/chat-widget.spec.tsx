@@ -147,6 +147,70 @@ describe('The chatbot in the corner', () => {
   });
 });
 
+describe('A new conversation', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** The "new conversation" button, if it is shown. */
+  function queryNewButton() {
+    return screen.queryByRole('button', { name: 'שיחה חדשה' });
+  }
+
+  it('is offered only once there is something to clear', () => {
+    stubApi(async () => new Response(JSON.stringify(answer)));
+    openApp();
+    const window = openChat();
+    expect(queryNewButton()).toBeNull();
+
+    fireEvent.change(within(window).getByRole('textbox'), {
+      target: { value: 'מה' },
+    });
+
+    expect(queryNewButton()).toBeTruthy();
+  });
+
+  it('clears the conversation, and the example questions show again', async () => {
+    stubApi(async () => new Response(JSON.stringify(answer)));
+    openApp();
+    ask('מה התעריף לקצובת הבראה?');
+    await screen.findByText(answer.answer);
+
+    fireEvent.click(queryNewButton() as HTMLElement);
+
+    expect(screen.queryByText(answer.answer)).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'מה התעריף לקצובת הבראה?' }),
+    ).toBeTruthy(); // an example question again
+    expect(queryNewButton()).toBeNull();
+  });
+
+  it('drops an answer that arrives after it started', async () => {
+    // The answer waits until the test lets it go.
+    let answerNow: (response: Response) => void = () => undefined;
+    stubApi(
+      () =>
+        new Promise<Response>((resolve) => {
+          answerNow = resolve;
+        }),
+    );
+    openApp();
+    ask('מה התעריף לקצובת הבראה?');
+    expect(await screen.findByText('מחפש תשובה בהוראות…')).toBeTruthy();
+
+    fireEvent.click(queryNewButton() as HTMLElement);
+    answerNow(new Response(JSON.stringify(answer)));
+
+    // Give the late answer time to arrive; it must not show.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText(answer.answer)).toBeNull();
+    expect(screen.queryByText('מחפש תשובה בהוראות…')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'מה התעריף לקצובת הבראה?' }),
+    ).toBeTruthy();
+  });
+});
+
 describe('A chat answer', () => {
   afterEach(() => {
     vi.unstubAllGlobals();

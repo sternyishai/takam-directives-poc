@@ -430,6 +430,16 @@ textarea:focus {
   margin: 0;
   font-size: 1.02rem;
 }
+/* The title and subtitle give way to the buttons, on one line each. */
+.chat-header > div:not(.chat-header-actions) {
+  min-width: 0;
+}
+.chat-header h2,
+.chat-header p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .chat-header p {
   margin: 0;
   color: rgb(255 255 255 / 75%);
@@ -446,13 +456,20 @@ textarea:focus {
   color: var(--color-primary-hover);
   font-weight: 700;
 }
-.chat-close {
+/* "New conversation" and close, at the far end of the header. */
+.chat-header-actions {
+  display: flex;
+  flex: none;
+  gap: 0.4rem;
   margin-inline-start: auto;
+}
+.chat-header-button {
   padding: 0.3rem 0.6rem;
   background: rgb(255 255 255 / 15%);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
-.chat-close:hover {
+.chat-header-button:hover {
   background: rgb(255 255 255 / 25%);
 }
 
