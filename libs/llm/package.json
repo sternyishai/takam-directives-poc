@@ -17,6 +17,7 @@
     "name": "llm"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@langchain/core": "^1.5.0",
     "@langchain/google-genai": "^2.3.7",
     "@langchain/langgraph": "^1.7.5",

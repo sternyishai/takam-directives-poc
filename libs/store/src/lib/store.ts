@@ -29,12 +29,18 @@ export interface StoredDirective {
   enrichmentError: string | null;
 }
 
-/** One chunk of a Directive's text, as the chatbot's retrieval searches it. */
-export interface StoredChunk {
-  /** Document code of the Directive the chunk is from. */
-  code: string;
+/** One chunk of a Directive's text, as ingest saves it. */
+export interface NewChunk {
   /** The chunk, starting with its context line "code · title › section". */
   text: string;
+  /** The chunk's vector from the embedding model, or null if it has none. */
+  embedding: number[] | null;
+}
+
+/** One chunk of a Directive's text, as the chatbot's retrieval searches it. */
+export interface StoredChunk extends NewChunk {
+  /** Document code of the Directive the chunk is from. */
+  code: string;
 }
 
 /** One row of the search log: what was searched, and how many results it got. */
@@ -142,21 +148,32 @@ export class Store {
   }
 
   /** Replaces the chunks of the Directive with this code, in their order. */
-  saveChunks(code: string, texts: string[]): void {
+  saveChunks(code: string, chunks: NewChunk[]): void {
     this.db.prepare('DELETE FROM chunks WHERE code = ?').run(code);
     const insert = this.db.prepare(
-      'INSERT INTO chunks (code, position, text) VALUES (?, ?, ?)',
+      'INSERT INTO chunks (code, position, text, embedding) VALUES (?, ?, ?, ?)',
     );
-    texts.forEach((text, position) => insert.run(code, position, text));
+    chunks.forEach((chunk, position) =>
+      insert.run(
+        code,
+        position,
+        chunk.text,
+        chunk.embedding ? JSON.stringify(chunk.embedding) : null,
+      ),
+    );
   }
 
   /** Every chunk in the store, each Directive's in order (the API indexes them all). */
   listChunks(): StoredChunk[] {
-    // `unknown` first: TypeScript can't see that a row of two text columns
-    // is a StoredChunk, so it refuses the direct cast.
-    return this.db
-      .prepare('SELECT code, text FROM chunks ORDER BY code, position')
-      .all() as unknown as StoredChunk[];
+    const rows = this.db
+      .prepare(
+        'SELECT code, text, embedding FROM chunks ORDER BY code, position',
+      )
+      .all() as { code: string; text: string; embedding: string | null }[];
+    return rows.map((row) => ({
+      ...row,
+      embedding: row.embedding === null ? null : JSON.parse(row.embedding),
+    }));
   }
 
   /** How many Directives are in the store. */

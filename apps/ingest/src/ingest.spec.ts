@@ -1,4 +1,4 @@
-import { fakeChatModel } from '@takam/llm';
+import { fakeChatModel, fakeEmbeddingModel } from '@takam/llm';
 import { Store } from '@takam/store';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -64,6 +64,9 @@ const always = (reply: string) => fakeChatModel(Array(10).fill(reply));
 /** A fake model that gives every Directive the same valid enrichment. */
 const alwaysValid = () => always(validReply);
 
+/** A fake embedding model that gives every chunk the same vector. */
+const embeddings = fakeEmbeddingModel(() => [0.6, 0.8]);
+
 describe('runIngest', () => {
   let folder: string;
   let dbPath: string;
@@ -85,6 +88,7 @@ describe('runIngest', () => {
       dbPath,
       await fakeSite(codes),
       alwaysValid(),
+      embeddings,
     );
 
     expect(result).toEqual({
@@ -102,12 +106,24 @@ describe('runIngest', () => {
 
   it('keeps the old store when more than 20% of the files are rejected', async () => {
     const codes = ['H.13.1.1', 'H.13.1.2', 'H.13.1.3', 'H.13.1.4', 'H.13.1.5'];
-    await runIngest(codes, dbPath, await fakeSite(codes), alwaysValid()); // the old store: 5
+    await runIngest(
+      codes,
+      dbPath,
+      await fakeSite(codes),
+      alwaysValid(),
+      embeddings,
+    ); // the old store: 5
 
     // 2 of 5 rejected is 40%: what the run looks like when the site's
     // firewall answers every download with its own HTML page.
     const site = await fakeSite(codes, ['H.13.1.2', 'H.13.1.4']);
-    const result = await runIngest(codes, dbPath, site, alwaysValid());
+    const result = await runIngest(
+      codes,
+      dbPath,
+      site,
+      alwaysValid(),
+      embeddings,
+    );
 
     expect(result).toEqual({
       stored: 3,
@@ -125,7 +141,13 @@ describe('runIngest', () => {
     const codes = ['H.13.1.1', 'H.13.1.2', 'H.13.1.3', 'H.13.1.4', 'H.13.1.5'];
 
     const site = await fakeSite(codes, ['H.13.1.3']);
-    const result = await runIngest(codes, dbPath, site, alwaysValid());
+    const result = await runIngest(
+      codes,
+      dbPath,
+      site,
+      alwaysValid(),
+      embeddings,
+    );
 
     expect(result).toEqual({
       stored: 4,
@@ -148,6 +170,7 @@ describe('runIngest', () => {
         dbPath,
         await fakeSite(codes),
         model,
+        embeddings,
       );
 
       expect(result).toEqual({
@@ -193,6 +216,7 @@ describe('runIngest', () => {
         dbPath,
         await fakeSite(codes),
         model,
+        embeddings,
       );
 
       // 1 of 5 is 20%: not more than 20%, so the store is replaced.
@@ -218,7 +242,13 @@ describe('runIngest', () => {
         'H.13.1.4',
         'H.13.1.5',
       ];
-      await runIngest(codes, dbPath, await fakeSite(codes), alwaysValid()); // the old store, enriched
+      await runIngest(
+        codes,
+        dbPath,
+        await fakeSite(codes),
+        alwaysValid(),
+        embeddings,
+      ); // the old store, enriched
 
       // What a run looks like when the LLM is down or its key has run out.
       const result = await runIngest(
@@ -226,6 +256,7 @@ describe('runIngest', () => {
         dbPath,
         await fakeSite(codes),
         always(invalidReply),
+        embeddings,
       );
 
       expect(result).toEqual({
@@ -252,6 +283,7 @@ describe('runIngest', () => {
         dbPath,
         await fakeSite(codes, [], paragraphs),
         alwaysValid(),
+        embeddings,
       );
       const store = new Store(dbPath);
       const chunks = store.listChunks();
@@ -261,6 +293,56 @@ describe('runIngest', () => {
         return chunk.text;
       });
     }
+
+    it('stores each chunk with its vector from the embedding model', async () => {
+      const codes = ['H.13.3.1'];
+      const site = await fakeSite(codes);
+
+      await runIngest(codes, dbPath, site, alwaysValid(), embeddings);
+
+      const store = new Store(dbPath);
+      expect(store.listChunks()).toEqual([
+        {
+          code: 'H.13.3.1',
+          text: 'H.13.3.1 · הוראה H.13.3.1\nטקסט',
+          embedding: [0.6, 0.8],
+        },
+      ]);
+      store.close();
+    });
+
+    it('rejects a Directive whose chunks get no vectors', async () => {
+      const codes = [
+        'H.13.3.1',
+        'H.13.3.2',
+        'H.13.3.3',
+        'H.13.3.4',
+        'H.13.3.5',
+      ];
+      // LangChain's Gemini class gives an empty vector, rather than throwing,
+      // when a batch of chunks fails; here it happens to the second Directive.
+      const failing = fakeEmbeddingModel((text) =>
+        text.startsWith('H.13.3.2') ? [] : [0.6, 0.8],
+      );
+
+      const result = await runIngest(
+        codes,
+        dbPath,
+        await fakeSite(codes),
+        alwaysValid(),
+        failing,
+      );
+
+      expect(result).toEqual({
+        stored: 4,
+        rejected: 1,
+        enrichmentFailed: 0,
+        replacedStore: true,
+      });
+      const store = new Store(dbPath);
+      expect(store.findDirective('H.13.3.2')).toBeNull();
+      store.close();
+    });
 
     it('splits at the headings, and starts each chunk with its context line', async () => {
       const chunks = await chunksOf([
