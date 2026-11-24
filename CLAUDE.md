@@ -1,7 +1,7 @@
 # Project context
 Take-home assignment POC for the Takam Directives site. See docs/assignment.md for the brief and docs/site-research.md for the site's JSON API.
 The author is learning React and must be able to explain every line, so keep code simple and readable and record decisions in the README.
-Status: grilling done (2026-11-23). Build from docs/plan.md, milestone by milestone. Domain terms are in GLOSSARY.md and decisions are in docs/adr/. After everything else is finished, write Hebrew versions of the ADRs (docs/adr/he/).
+Status: grilling done (2026-11-23). Build from docs/plan.md, milestone by milestone. Domain terms are in GLOSSARY.md and decisions are in docs/adr/. Order of the remaining work (set by the author on 2026-11-24): first #14, the Hebrew versions of the ADRs (docs/adr/he/); then #13, the video; then, if there is time, #29 (a bug: Latin keywords fail the enrichment). A new ADR also needs its Hebrew version in docs/adr/he/.
 
 ## Git workflow
 Every issue is built on its own branch, never committed directly to `main`. This rule overrides any skill that says to commit to the current branch.
