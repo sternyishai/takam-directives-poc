@@ -115,4 +115,12 @@ describe('The Directive viewer (/directive/:code)', () => {
 
     expect(await screen.findByText('השרת אינו זמין')).toBeTruthy();
   });
+
+  it('links back to all the Directives after a direct link', async () => {
+    stubApi(200, travel);
+    openViewer('H.13.10.1');
+
+    const back = await screen.findByRole('link', { name: '→ לכל ההוראות' });
+    expect(back.getAttribute('href')).toBe('/');
+  });
 });

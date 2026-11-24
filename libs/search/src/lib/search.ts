@@ -117,23 +117,36 @@ export class DirectiveSearch {
    * The Directives that match `query`, best match first. With expired ones
    * included, every In-force result still comes before every expired one, so
    * a current rule is never ranked below an old one ("validity first").
+   * An empty query matches every Directive, in code order (13.4 before
+   * 13.10): the web app's table shows them all before the user searches.
    */
   search(query: string, options: SearchOptions): SearchResult[] {
     const { today, inForce = true, limit = DEFAULT_LIMIT } = options;
-    const results: SearchResult[] = this.index.search(query).map((hit) => {
-      // Every hit's id is the code of a Directive added in the constructor.
-      const directive = this.directives.get(hit.id) as SearchableDirective;
-      return {
-        code: directive.code,
-        title: directive.title,
-        type: directive.type,
-        chapterPath: directive.chapterPath,
-        inForce: isInForce(directive.validFrom, directive.validTo, today),
-        validTo: directive.validTo,
-        snippet: this.snippetFor(directive, hit.terms),
-        score: hit.score,
-      };
-    });
+    // Each hit: the Directive, the words it matched and its score.
+    const hits =
+      query.trim() === ''
+        ? [...this.directives.values()]
+            .sort((a, b) =>
+              a.code.localeCompare(b.code, 'en', { numeric: true }),
+            )
+            .map((directive) => ({ directive, terms: [], score: 0 }))
+        : this.index.search(query).map((hit) => ({
+            // Every hit's id is the code of a Directive added in the constructor.
+            directive: this.directives.get(hit.id) as SearchableDirective,
+            terms: hit.terms,
+            score: hit.score,
+          }));
+    const results: SearchResult[] = hits.map(({ directive, terms, score }) => ({
+      code: directive.code,
+      title: directive.title,
+      type: directive.type,
+      chapterPath: directive.chapterPath,
+      inForce: isInForce(directive.validFrom, directive.validTo, today),
+      validTo: directive.validTo,
+      // No matched words: the snippet is the summary (or the opening).
+      snippet: this.snippetFor(directive, terms),
+      score,
+    }));
 
     const inForceResults = results.filter((result) => result.inForce);
     const expiredResults = results.filter((result) => !result.inForce);

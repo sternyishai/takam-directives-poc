@@ -12,11 +12,18 @@ function openHome() {
   );
 }
 
-/** Stands in for the API: every fetch answers with this health report. */
+/**
+ * Stands in for the API: /api/health answers this report, and the table's
+ * /api/search answers no Directives.
+ */
 function stubHealth(report: HealthReport) {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => new Response(JSON.stringify(report))),
+    vi.fn(async (url: string) =>
+      url.startsWith('/api/search')
+        ? new Response('[]')
+        : new Response(JSON.stringify(report)),
+    ),
   );
 }
 
@@ -44,7 +51,8 @@ describe('The home page (/)', () => {
 
     openHome();
 
-    expect(await screen.findByText('השרת אינו זמין')).toBeTruthy();
+    // Twice: the store's count and the table both say so.
+    expect(await screen.findAllByText('השרת אינו זמין')).toHaveLength(2);
   });
 
   it('tells the user when the API answers with an error', async () => {
@@ -58,6 +66,7 @@ describe('The home page (/)', () => {
 
     openHome();
 
-    expect(await screen.findByText('השרת אינו זמין')).toBeTruthy();
+    // Twice: the store's count and the table both say so.
+    expect(await screen.findAllByText('השרת אינו זמין')).toHaveLength(2);
   });
 });

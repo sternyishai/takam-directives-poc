@@ -1,9 +1,12 @@
 import { Link, Route, Routes } from 'react-router';
+import { ChatWidget } from './chat-widget';
 import { DirectivePage } from './directive-page';
 import { HomePage } from './home-page';
 
 /**
- * The header on every page, then the page for the URL. The router itself
+ * The header on every page, then the page for the URL, and the chatbot in
+ * the corner. The chatbot is outside <Routes>, so it stays (with its
+ * conversation) when the page changes. The router itself
  * (BrowserRouter) is added in main.tsx, so tests can wrap App in a
  * MemoryRouter at any URL instead.
  */
@@ -28,6 +31,7 @@ export function App() {
           <Route path="/directive/:code" element={<DirectivePage />} />
         </Routes>
       </div>
+      <ChatWidget />
     </>
   );
 }

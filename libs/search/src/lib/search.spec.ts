@@ -126,7 +126,7 @@ const TODAY = '2026-11-23';
 /** The codes of the results, in rank order. */
 function codesFor(
   query: string,
-  options: { inForce?: boolean; today?: string } = {},
+  options: { inForce?: boolean; today?: string; limit?: number } = {},
 ) {
   return index
     .search(query, { today: TODAY, ...options })
@@ -293,8 +293,40 @@ describe('DirectiveSearch', () => {
     );
   });
 
-  it.each(['', '   '])('returns nothing for an empty query (%j)', (query) => {
-    expect(codesFor(query, { inForce: false })).toEqual([]);
+  describe('an empty query (the table before a search)', () => {
+    it.each(['', '   '])(
+      'lists every In-force Directive in code order (%j)',
+      (query) => {
+        // Numbers compare as numbers: 13.4 comes before 13.10.
+        expect(codesFor(query, { limit: 50 })).toEqual([
+          'H.1.1.1',
+          'H.13.4.1',
+          'H.13.4.2',
+          'H.13.7.12',
+          'H.13.10.1',
+          'H.13.10.2',
+          'HOD.13.4.1.2',
+          'HOD.13.10.2.2',
+        ]);
+      },
+    );
+
+    it('adds the Expired and not-yet-valid ones at the end when asked', () => {
+      const codes = codesFor('', { inForce: false, limit: 50 });
+      expect(codes).toHaveLength(11);
+      expect(codes.slice(-3)).toEqual([
+        'HOD.13.3.1.1',
+        'HOD.13.5.1.1',
+        'HZ.13.10.1.1',
+      ]);
+    });
+
+    it('gives each one its summary as the snippet', () => {
+      const [rented] = index
+        .search('', { today: TODAY })
+        .filter((result) => result.code === 'H.13.4.2');
+      expect(rented.snippet).toBe('החזר הוצאות על כלי תחבורה שכור, כולל ביטוח');
+    });
   });
 
   describe("enrichment (the LLM's summary, keywords and questions)", () => {

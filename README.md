@@ -46,7 +46,7 @@ One Nx monorepo, in TypeScript throughout:
 |---|---|---|
 | `apps/ingest` | A command-line run that downloads each Directive's latest Edition through the site's own JSON API, puts it through a security gate, converts it to HTML, has the LLM write its summary, cuts it into chunks and embeds them, and swaps a new store in only if the run is good. [Pipeline diagram](docs/diagrams/ingest-pipeline.png) | Node 24, JSZip, Mammoth, sanitize-html, LangChain |
 | `apps/api` | `GET /api/search`, `GET /api/directives/:code`, `POST /api/chat` and `GET /api/health`. Builds the search indexes from the store when it starts. | NestJS |
-| `apps/web` | The search page (box, dropdown, filter, results, chat panel) and the viewer, in Hebrew, right to left | React, Vite, React Router |
+| `apps/web` | The search page (box, dropdown, filter, results table), the viewer, and the chatbot on every page, in Hebrew, right to left | React, Vite, React Router |
 | `libs/search` | Hebrew normalization, Directive search and passage search, cosine similarity | MiniSearch |
 | `libs/llm` | The models (Gemini, and fakes for the tests), enrichment, and the chat as a LangGraph: retrieve → generate → checkCitations, with one retry. [Chat-flow diagram](docs/diagrams/chat-flow.png) | LangChain.js, LangGraph, zod, Gemini |
 | `libs/store`, `libs/sanitize`, `libs/shared` | The SQLite schema and queries, the HTML allowlist, and the types and date rules both sides share | `node:sqlite`, sanitize-html |
@@ -102,23 +102,26 @@ If the API runs on another port (`PORT=4000 npm run api`), start the web app wit
 ```bash
 npm run dev
 ```
-Open http://localhost:4200, type a word or a Document code (`נסיעות`, `13.10.1`) and press "חיפוש" (search). The results are a flat list, best match first. Each result shows:
-- its chapter path as numbers (`13 › 13.10 › 13.10.1`)
+Open http://localhost:4200. Before any search, the table lists every In-force Directive in code order. Type a word or a Document code (`נסיעות`, `13.10.1`) and press "חיפוש" (search): the table then shows only the results, best match first, and "הצג את כל ההוראות" (show all the Directives) brings the full list back. The table scrolls in its own box, with its header row always in view. Each row shows:
+- the Document code
+- the title, linked to the viewer, with a snippet under it (the heading that matched, or else the Directive's summary)
+- its subject (its closest Chapter, e.g. `13.4 נסיעות בתפקיד בארץ`)
 - its Directive type
-- a snippet (the heading that matched, or else the Directive's summary)
-- a red "לא בתוקף" (not in force) badge if it is not in force
+- a green "בתוקף" (in force) or red "לא בתוקף" (not in force) badge
 
 Only In-force Directives are shown until you tick "הצג גם הוראות שאינן בתוקף" (show Directives that are not in force too).
+The query and the filter are kept in the URL (`/?q=רכב&expired=1`), so the viewer's back link, the browser's back button and a shared link all show the same results.
 
 While you type, a dropdown under the box shows the top 3 matches, each with its Document code, title and a green "בתוקף" (in force) or red "לא בתוקף" badge. The arrow keys move the selection, Enter opens the selected Directive, and Escape closes the dropdown. Clicking an entry opens it too. Enter with nothing selected, or the "חיפוש" button, shows the full results.
-The API is `GET /api/search?q=…&inForce=true&limit=20`. `inForce` is true unless it is `false`, and `limit` is 1 to 50. Every search adds a row to the `search_log` table: the query, the filter, the number of results and the time.
+The API is `GET /api/search?q=…&inForce=true&limit=20`. `inForce` is true unless it is `false`, and `limit` is 1 to 50 (the table asks for 50). An empty `q` returns every Directive, in code order. Every search adds a row to the `search_log` table: the query, the filter, the number of results and the time.
 
 ### Ask the chatbot
 ```bash
 npm run dev        # needs GOOGLE_API_KEY and LLM_MODEL in .env
 ```
-Open http://localhost:4200 and type a question in the "שאלה על ההוראות" (a question about the Directives) panel beside the search, for example "מה התעריף לקצובת הבראה?" (what is the recuperation pay rate?). The answer cites the passages it used as `[n]`. Under it, each Citation shows the Directive's code and title and links to the viewer, with a red "לא בתוקף" badge if the Directive is Expired. When the Directives don't answer the question, the panel says "לא מצאתי תשובה בהוראות" (I didn't find an answer in the Directives).
-Without a key, or when Gemini fails, the panel says chat is unavailable, and search and the viewer keep working.
+On any page, the "שאלו את ההוראות" (ask the Directives) button in the bottom corner opens the chat window. Type a question, or click one of the example questions, for example "מה התעריף לקצובת הבראה?" (what is the recuperation pay rate?). Enter sends, and Shift+Enter starts a new line. The answer cites the passages it used as `[n]`. Under it, each Citation shows its number, the Directive's code and title, and links to the viewer, with a red "לא בתוקף" badge if the Directive is Expired. When the Directives don't answer the question, the bot says "לא מצאתי תשובה בהוראות" (I didn't find an answer in the Directives).
+The window keeps the conversation while you move between pages (after opening a Citation, say), until the page is reloaded. Each question is still sent on its own: the API does not see the earlier ones.
+Without a key, or when Gemini fails, the bot says chat is unavailable, and search and the viewer keep working.
 The API is `POST /api/chat` with `{"question": "…"}` (1 to 500 characters). It returns `{answer, citations: [{n, code, title, inForce}], found}`, 400 without a usable question, and 503 when chat is unavailable.
 
 ### Read a Directive
@@ -128,6 +131,7 @@ npm run dev
 ```
 Then open http://localhost:4200/directive/H.13.10.1. The page shows the Directive's code, title, type, a short summary (marked as written by a language model), its chapter path, edition, validity dates, a link to its page on the Takam site, and its text.
 An expired Directive (try `HZ.13.10.1.1`) gets a red "הוראה זו אינה בתוקף" (this Directive is not in force) banner.
+"→ חזרה" (back) at the top returns to the page you came from, such as the same search results. After a direct link it says "→ לכל ההוראות" (to all the Directives) and leads to `/`.
 
 ### Refill the store
 ```bash
@@ -262,10 +266,16 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
   - **The colours, corners and shadows are named once** as CSS custom properties (`--color-primary` and so on) at the top of the file, and every rule uses those names. A deep blue for the header, links and buttons, a thin gold line under the header, white cards on a light grey page, and red kept only for "not in force". It does not copy the official site's branding.
   - **The system font** (`system-ui`): every system's own font has good Hebrew letters, and the API's Content-Security-Policy allows no fonts from other sites.
   - **A header on every page** (`app.tsx`), whose name links back to search. The viewer had no way back before. The home page's heading is now "מציאת הוראה" (find a Directive), so the name is not shown twice.
-  - **The chat panel is `position: sticky`**, so it stays in view while the results scroll. On a narrow screen it moves below the results, as before.
+  - **The chat panel was `position: sticky`** beside the results. Issue #33 replaced it with the chatbot in the corner (below).
   - **The Directive text's numbered lists showed a bullet and a number.** Word's numbering arrives from the converter as `<ul><li><ol>`, a bullet list around the numbered one. The CSS hides the outer bullet with `:has()` instead of changing the stored HTML, so a new ingest is not needed.
   - **Wide rate tables scroll on their own**, inside the text, so the page never scrolls sideways. It was checked at 390px wide.
   - **The keyboard focus ring is gold and 3px**, on every link, button and box, so it is easy to see on both white and blue.
+- **A results table, a chatbot on every page, and a back link** (issue #33).
+  - **The results are a `<table>`**, not cards: a Directive has a code, a title, a subject, a type and a validity, and a table lines those up so they can be compared down a column. It scrolls inside its own box (`max-height` and `overflow: auto`), and its header row is `position: sticky`, so the column names stay in view. On a narrow screen the table keeps a minimum width and scrolls sideways instead of squeezing its columns.
+  - **An empty query lists every Directive** (`DirectiveSearch.search` in `libs/search`), so the home page is never empty. They come in code order, with numbers compared as numbers (13.4 before 13.10), and each has its summary as the snippet. The table asks for `limit=50`, the API's largest, so all 30 show. A store over 50 Directives would need paging.
+  - **The query and the filter live in the URL** (`useSearchParams`), not in component state. When the user opens a Directive and comes back, the home page is drawn again from scratch: anything kept only in state would be lost, but the URL is still there. This also makes a search a link that can be shared.
+  - **The chatbot is rendered by `App`, outside `<Routes>`**, so it is on every page and React keeps it (and its conversation) when the page changes. Only the window keeps the earlier messages: each question is still sent on its own, so the plan's "no history" holds for the API and the model, and the answers stay checkable one by one.
+  - **The back link goes back one step in the history** (`navigate(-1)`) when the user came from inside the app, like the browser's own back button. After a direct link there is nothing inside the app to go back to (React Router gives that first page the key `"default"`), so it becomes a link to `/`.
 - **Vitest runs once, not in watch mode** (`testMode: "run"` in `nx.json`), so `npm test` finishes.
 
 ### Tests and CI
