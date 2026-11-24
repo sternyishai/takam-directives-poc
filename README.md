@@ -60,6 +60,7 @@ Why these choices:
 - **TypeScript in every part,** so the API and the web app share types, and one test runner style covers everything.
 - **The site's JSON API, not scraping its pages:** the same endpoints the site's Angular app uses (see [`docs/site-research.md`](docs/site-research.md)).
 - **One SQLite file and an in-memory index:** 30 Directives and 376 chunks need no database server and no vector database. Production moves to Postgres with pgvector ([HLD, Runtime](docs/production-hld.md#1-runtime)).
+- **Whole-word Hebrew search in memory** (ADR 0004), **hybrid retrieval for the chatbot** (ADR 0005), and **every file treated as hostile** (ADR 0006).
 - **LangChain models as the seam to the LLM** (ADR 0002): Gemini is one class, and the tests use LangChain's fake models, so no test needs a key. The Citations are checked by our code, so changing the vendor does not change how safe the answers are.
 
 How it would run in an organization is in the [production HLD](docs/production-hld.md) and its [diagram](docs/diagrams/production-architecture.png).
@@ -177,7 +178,7 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
 - **`data/takam.db` is committed** (ADR 0003), so a clean clone runs the viewer and the tests with no network. Each ingest run builds a whole new store, so a schema change only needs a new run.
 - **A fourth library, `libs/store`.** Ingest writes the store and the API reads it, so the schema and the SQL live in one place that both import. It is Node-only (`node:sqlite`), which is why it is not in `libs/shared`: the web app imports `libs/shared`. In the API, `StoreService` is just `Store` made into a Nest provider.
 - **In force is computed by the API on each request**, from the dates and today's date in Israel (ADR 0001). The store keeps only the dates, so a Directive turns expired at midnight without a new ingest. `isInForce` compares ISO date strings, which sort the same way as dates. Both ends are inclusive, and a missing valid-to means no end.
-- **The security gate checks the cheapest things first:**
+- **The security gate checks the cheapest things first** (ADR 0006):
   1. the size (under 2 MB)
   2. the zip magic bytes `PK\x03\x04`, with a separate reason when the file is the site's HTML page
   3. that the zip opens and contains `word/document.xml`
@@ -204,7 +205,7 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
 - **The API sends `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` on every response**, errors included. The API only sends JSON, so it may load nothing, and no site may frame it. The header is set in `configureApp` (`apps/api/src/app/configure-app.ts`), which `main.ts` and the e2e tests share, so the tests run the same setup as the real server. The page's own CSP belongs to whatever serves the built web app (see the production HLD).
 - **The official link is `https://takam.mof.gov.il/document/{code}`.** This is the site's own Angular route, `document/:id`, which loads a Document by its code.
 - **The router (`BrowserRouter`) wraps `App` in `main.tsx`**, so the tests can render `App` inside a `MemoryRouter` at any URL.
-- **Search matches whole words only.** MiniSearch is used without prefix matching, so "רכב" (car) does not match the inside of a longer word, and "נסיע" finds nothing. Words are split at spaces and punctuation, but a dot or a quote inside a word is kept, so `13.10.1` and `צה"ל` each stay one word.
+- **Search matches whole words only** (ADR 0004). MiniSearch is used without prefix matching, so "רכב" (car) does not match the inside of a longer word, and "נסיע" finds nothing. Words are split at spaces and punctuation, but a dot or a quote inside a word is kept, so `13.10.1` and `צה"ל` each stay one word.
 - **Every word is normalized the same way in the index and in the query** (`normalizeWord` in `libs/search`), so the ways Hebrew is really typed all match. In this order:
   1. lower case
   2. niqqud (vowel points) removed: `רֶכֶב` → `רכב`. The regular expression `\p{Mn}` matches every mark that sits on a letter.
@@ -258,7 +259,7 @@ The raw files are kept in `data/raw/`, which is gitignored and never served.
   - **The committed store got its chunks without a new ingest.** Chunks depend only on the stored HTML, so they were written by running `chunkDirective` over the 30 stored Directives. A full ingest would also have called the LLM again and changed the enrichment.
   - **Checked on the real data:** "מה התעריף לקצובת הבראה?" retrieves only H.13.3.1 and HOD.13.3.1.1 (`apps/api/src/chat/committed-store.spec.ts`), and with the real key Gemini answers 511.6 ₪ a day for 2026, citing HOD.13.3.1.1, whose link opens that Directive in the viewer. One question takes about 6 seconds.
   - **No streaming and no history**, as the plan says: one question, one answer. The panel notes that the answer was written by a language model and that the Directive's wording is what binds.
-- **Hybrid retrieval** (issue #11). A question worded differently from the Directive ("how much do I get a day on a work trip abroad?" against "קצובת שהייה") shares no words with it, so keyword search alone misses it. Now the chatbot also looks for the chunks whose meaning is closest.
+- **Hybrid retrieval** (issue #11, ADR 0005). A question worded differently from the Directive ("how much do I get a day on a work trip abroad?" against "קצובת שהייה") shares no words with it, so keyword search alone misses it. Now the chatbot also looks for the chunks whose meaning is closest.
   - **Ingest embeds every chunk** with Gemini's `gemini-embedding-001` (`EMBEDDING_MODEL`), one batch call per Directive, and stores the vector in a new `embedding` column of `chunks`. The vector is JSON text, like the keywords: it is easy to read back and to explain, and SQLite has no array type. A `BLOB` of 4-byte floats would be about a third of the size; at 376 chunks the committed store is about 5 MB in all, which is fine.
   - **768 numbers per vector, not the default 3,072.** Google recommends 768 as one of the smaller sizes for this model (`outputDimensionality`). It is a quarter of the store, and plenty for 376 chunks.
   - **Chunks and questions are embedded differently**, as Gemini asks: `RETRIEVAL_DOCUMENT` for a chunk at ingest, `RETRIEVAL_QUERY` for the question in the API (`embeddingModelFromEnv('chunk' | 'question')` in `libs/llm`). LangChain's class takes the task type once, when it is made, so there are two instances.
