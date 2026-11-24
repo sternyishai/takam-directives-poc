@@ -77,7 +77,7 @@ function isDirectiveType(type: string): type is DirectiveType {
  * kept, the same way as for rejected files.
  *
  * Each chunk is embedded by `embeddings`, for the chatbot's hybrid
- * retrieval. A Directive whose chunks get no vectors is rejected.
+ * retrieval. A Directive is rejected if any of its chunks gets no vector.
  */
 export async function runIngest(
   codes: string[],

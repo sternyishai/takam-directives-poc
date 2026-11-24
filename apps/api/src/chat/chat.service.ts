@@ -49,9 +49,11 @@ export class ChatService {
    * or by its words only when there is no embedding model.
    */
   private async retrieve(question: string, today: string) {
-    const vector = this.embeddings
-      ? await this.embeddings.embedQuery(question)
-      : null;
+    if (!this.embeddings) return this.passages.search(question, today);
+    const vector = await this.embeddings.embedQuery(question);
+    // LangChain's Gemini class gives an empty vector, rather than throwing,
+    // when the reply has none.
+    if (vector.length === 0) throw new Error('no vector for the question');
     return this.passages.search(question, today, vector);
   }
 }

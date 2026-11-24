@@ -180,14 +180,15 @@ describe('POST /api/chat', () => {
 
     await ask(app, { question: 'מה התעריף לקצובת הבראה?' });
 
-    // The words find the two recuperation chunks, and so do the vectors
-    // (with the per-diem chunk after them): 3 different passages, not 5.
     // The messages sent to the model; `unknown` first, because LangChain's
     // type for them also allows forms these tests never send.
     const [messages] = invoke.mock.calls[0] as unknown as [
       { content: string }[],
     ];
     const prompt = messages[1].content;
+
+    // The words find the two recuperation chunks, and so do the vectors
+    // (with the per-diem chunk after them): 3 different passages, not 5.
     expect(prompt.split('511.6')).toHaveLength(2); // the rates chunk, once
     expect(prompt.split('432 ₪')).toHaveLength(2); // the old rates, once
     expect(prompt).toContain('[3] ');
@@ -235,6 +236,26 @@ describe('POST /api/chat', () => {
       .spyOn(failing, 'invoke')
       .mockRejectedValue(new Error('quota exceeded'));
     app = await startApi(folder, failing);
+
+    const response = await ask(app, { question: 'מה התעריף לקצובת הבראה?' });
+
+    expect(response.status).toBe(503);
+  });
+
+  it.each([
+    {
+      name: 'throws',
+      vectorOf: (): number[] => {
+        throw new Error('quota exceeded');
+      },
+    },
+    { name: 'gives an empty vector', vectorOf: (): number[] => [] },
+  ])('answers 503 when the embedding model $name', async ({ vectorOf }) => {
+    app = await startApi(
+      folder,
+      fakeChatModel(['תשובה [1].']),
+      fakeEmbeddingModel(vectorOf),
+    );
 
     const response = await ask(app, { question: 'מה התעריף לקצובת הבראה?' });
 

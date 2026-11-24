@@ -14,7 +14,7 @@ export type EmbeddingModel = Embeddings;
  * default; 768 is one of the sizes Google recommends for a smaller one, and
  * keeps the 376 chunks' vectors in the committed store small.
  */
-export const EMBEDDING_DIMENSIONS = 768;
+const EMBEDDING_DIMENSIONS = 768;
 
 /**
  * What the text is, for Gemini: a chunk to be found (ingest) or a question
@@ -55,15 +55,23 @@ export function fakeEmbeddingModel(
   return new FakeEmbeddingModel(vectorOf);
 }
 
+/**
+ * LangChain's own fake embeddings give every text the same vector, so a
+ * test could not make one chunk closer than another. This one asks
+ * `vectorOf`. An embedding model is any class that extends `Embeddings` and
+ * has these two methods.
+ */
 class FakeEmbeddingModel extends Embeddings {
   constructor(private readonly vectorOf: (text: string) => number[]) {
-    super({});
+    super({}); // no options: the fake never retries or waits
   }
 
+  /** The vectors of the chunks, in order (ingest calls this). */
   async embedDocuments(texts: string[]): Promise<number[][]> {
     return texts.map(this.vectorOf);
   }
 
+  /** The vector of one question (the API calls this). */
   async embedQuery(text: string): Promise<number[]> {
     return this.vectorOf(text);
   }
