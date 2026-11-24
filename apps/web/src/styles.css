@@ -134,6 +134,72 @@ textarea:focus {
   font-size: 0.95rem;
 }
 
+/* The navbar: pushed to the end of the header (the left, in rtl). */
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-inline-start: auto;
+}
+.site-nav a {
+  padding: 0.3rem 0.8rem;
+  border-radius: var(--radius-small);
+  color: rgb(255 255 255 / 85%);
+  font-weight: 600;
+  text-decoration: none;
+}
+.site-nav a:hover {
+  background: rgb(255 255 255 / 12%);
+  color: #fff;
+}
+/* The current page (NavLink adds the "active" class). */
+.site-nav a.active {
+  background: rgb(255 255 255 / 20%);
+  color: #fff;
+  box-shadow: inset 0 -2px 0 var(--color-accent);
+}
+
+/* The diagrams, videos and ADR pages (docs-pages.tsx): one card per item. */
+.doc-card {
+  margin: 0 0 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-card);
+  box-shadow: var(--shadow);
+}
+.doc-card-title {
+  margin-bottom: 0.75rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.diagram,
+.video {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.video {
+  max-height: 70vh;
+  background: #000;
+}
+.adr-list {
+  padding-inline-start: 2.5rem;
+}
+.adr-list li {
+  padding: 0.35rem 0;
+}
+.adr h1 {
+  margin-top: 0;
+  font-size: 1.4rem;
+}
+.adr code {
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+  background: var(--color-primary-soft);
+  font-size: 0.9em;
+}
+
 /* The page under the header. */
 .page {
   max-width: var(--page-width);

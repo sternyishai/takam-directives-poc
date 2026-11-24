@@ -32,6 +32,8 @@ The database is already in the repo (`data/takam.db`, a SQLite file). It holds t
 
 More diagrams are in [docs/diagrams/](docs/diagrams/), for example the [chat flow](docs/diagrams/chat-flow.png).
 
+The navbar at the top has four pages: **האפליקציה** (the app: search, the viewer and the chatbot), **תרשימים** (the diagrams), **סרטונים** (the videos) and **החלטות (ADR)** (the decisions, in Hebrew). To add a video, put the `.mp4` file in `docs/videos/`.
+
 ## 3. Turn on the chatbot (optional)
 The chatbot needs a Gemini API key. If you were sent one:
 ```bash
