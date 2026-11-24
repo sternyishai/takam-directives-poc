@@ -94,9 +94,8 @@ const VIDEO_TITLES: Record<string, string> = {
 export const videos: RepoFile[] = Object.entries(videoUrls)
   .map(([path, url]) => {
     const name = fileName(path);
-    const title =
-      VIDEO_TITLES[withoutExtension(name)] ?? withoutExtension(name);
-    return { name, title, url };
+    const stem = withoutExtension(name);
+    return { name, title: VIDEO_TITLES[stem] ?? stem, url };
   })
   .sort((a, b) => a.name.localeCompare(b.name));
 

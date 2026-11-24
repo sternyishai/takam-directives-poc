@@ -67,18 +67,18 @@ describe('The navbar and the docs pages', () => {
     }
   });
 
-  it('shows the two films of issue #13 in order, under Hebrew titles', () => {
+  it('shows the two films in order, under Hebrew titles', () => {
     openAt('/videos');
 
-    const titles = [...document.querySelectorAll('figcaption')].map(
+    const titles = Array.from(document.querySelectorAll('figcaption')).map(
       (caption) => caption.textContent,
     );
     expect(titles).toEqual([
       'הבעיות שפתרנו: קוראים, מוצאים, שואלים',
       'איך זה עובד: הרכיבים וזרימת הנתונים',
     ]);
-    const sources = [...document.querySelectorAll('video')].map((player) =>
-      player.getAttribute('src'),
+    const sources = Array.from(document.querySelectorAll('video')).map(
+      (player) => player.getAttribute('src'),
     );
     expect(sources[0]).toContain('01-find-read-ask');
     expect(sources[1]).toContain('02-how-it-works');
