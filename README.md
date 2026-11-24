@@ -1,21 +1,80 @@
 # Takam Directives POC
 
-Take-home assignment built around the Takam Directives website: https://takam.mof.gov.il/
+A take-home assignment built on the Takam Directives website, https://takam.mof.gov.il/. Takam (תכ"ם) holds the Accountant General's binding Directives for government ministries.
 
-> Work in progress. These sections will be filled in as the work goes on.
+- **Part A** (below): the problem, the solution and the technical design.
+- **Part B:** how to install, run and test the POC from a clean clone, and the decisions made while building it.
+- **Part C:** short answers, with links to the production design in [`docs/production-hld.md`](docs/production-hld.md).
+
+Terms such as Directive, Edition, In force and Citation are defined in [`GLOSSARY.md`](GLOSSARY.md). The decisions with real trade-offs are in [`docs/adr/`](docs/adr/).
 
 ## Part A: Problem and solution
-- **Problem:** _TBD_
-- **Solution:** _TBD_
-- **Technical design:** _TBD_
+
+### The problem
+Government employees in finance, salaries, procurement and HR have to follow the Takam Directives, which are binding. On the current site they can't reliably **find** the Directive that applies to them, can't **read** it without downloading a Word file, and can't **trust** that it is still in force.
+Each point below was checked on the live site on 2026-11-23 (all of the evidence is in [`docs/ux-findings.md`](docs/ux-findings.md)):
+
+| | What happens on the site today | Evidence |
+|---|---|---|
+| Find | Search covers only the metadata (title, code, keywords), never the text. | Headings inside Directive H.1.1.1, such as "תקציב גמיש" (flexible budget), return 0 results. |
+| Find | Search matches parts of words, with no ranking. | "רכב" (car) returns 62 results, and the first is H.1.1.1, a budget glossary, because its keywords contain "הרכב התקציב" (the *composition* of the budget). The results are a chapter tree, not a ranked list. |
+| Find | There is no tolerance for typos or Hebrew spelling variants. | "גמלאות" (pensions) finds 8, while "גימלאות", the same word in full spelling, finds 0. "רכבב" (one extra letter) finds 0. |
+| Find | The metadata is thin, so better matching on it alone can't fix search. | 696 of 1,127 Documents have no keywords, and in 260 of 418 Instructions the description is just the code. |
+| Read | Reading a Directive means downloading a `.docx`. | Nothing is shown in the browser. That is awkward on a phone, and a section can't be linked to. |
+| Trust | Expired Directives are mixed in with the rest and hardly marked. | The validity filter defaults to "all". 53 Documents have expired. One of them shows a green "valid" check next to its title, and the API's own `isvalid` flag is inverted (ADR 0001). |
+
+**Who it affects:** every ministry employee who has to act by a Directive, such as paying a per-diem abroad or a car allowance, and the Takam staff who answer the questions those employees can't settle on the site.
+**Why it is worth solving:** a Directive is a binding rule about public money. When the right one can't be found, someone pays by a rule they remember, by an expired one, or not at all, and someone else has to answer a question the site should have answered.
+
+### The solution
+A web app over the same Directives that fixes the three problems:
+- **Find:** full-text search over each Directive's own text (its title, code and headings), plus a short summary, keywords and likely questions that an LLM writes for each Directive. Matching is by whole word and understands how Hebrew is typed: prefixes (ה/ב/ל…), full and short spelling, quotes in abbreviations, final letters, niqqud, and a typo scaled to the word's length. The results are one flat ranked list, each with a snippet that shows why it matched. A dropdown shows the top 3 while you type.
+- **Read:** each Directive opens as a page in the browser, converted from its Word file and sanitized, with a short summary on top and a link to its page on the official site.
+- **Trust:** In force is computed from the validity dates on every request, never from the `isvalid` flag. Search shows only Directives in force unless you ask for the rest, and every expired Directive gets a red badge or banner.
+- **Ask** (the optional AI part): a chatbot answers a question only from passages of the Directives, and cites them as `[n]`. Our code checks every Citation before the answer is shown. A Citation links to the Directive, and an expired one is flagged. If the Directives don't answer the question, it says so.
+
+The POC covers 30 Directives (in [`apps/ingest/ingest.config.json`](apps/ingest/ingest.config.json)), chosen to test the hard cases: the "רכב" trap, the two spellings of "גמלאות", similar travel Directives, two expired ones, one that starts in 2027, and the common allowance questions.
+
+### The technical design
+![POC architecture](docs/diagrams/poc-architecture.png)
+
+Source: [`docs/diagrams/poc-architecture.excalidraw`](docs/diagrams/poc-architecture.excalidraw). Each of the four diagrams in [`docs/diagrams/`](docs/diagrams/) is a PNG with its Excalidraw source beside it, which opens at https://excalidraw.com for editing.
+
+One Nx monorepo, in TypeScript throughout:
+
+| Part | What it does | Technologies |
+|---|---|---|
+| `apps/ingest` | A command-line run that downloads each Directive's latest Edition through the site's own JSON API, puts it through a security gate, converts it to HTML, has the LLM write its summary, cuts it into chunks and embeds them, and swaps a new store in only if the run is good. [Pipeline diagram](docs/diagrams/ingest-pipeline.png) | Node 24, JSZip, Mammoth, sanitize-html, LangChain |
+| `apps/api` | `GET /api/search`, `GET /api/directives/:code`, `POST /api/chat` and `GET /api/health`. Builds the search indexes from the store when it starts. | NestJS |
+| `apps/web` | The search page (box, dropdown, filter, results, chat panel) and the viewer, in Hebrew, right to left | React, Vite, React Router |
+| `libs/search` | Hebrew normalization, Directive search and passage search, cosine similarity | MiniSearch |
+| `libs/llm` | The models (Gemini, and fakes for the tests), enrichment, and the chat as a LangGraph: retrieve → generate → checkCitations, with one retry. [Chat-flow diagram](docs/diagrams/chat-flow.png) | LangChain.js, LangGraph, zod, Gemini |
+| `libs/store`, `libs/sanitize`, `libs/shared` | The SQLite schema and queries, the HTML allowlist, and the types and date rules both sides share | `node:sqlite`, sanitize-html |
+| `data/takam.db` | The only store: Directives, enrichment, HTML, chunks with their vectors, and the search log. It is committed, so search, the viewer and the tests need no network and no key (ADR 0003). | SQLite |
+
+Why these choices:
+- **TypeScript in every part,** so the API and the web app share types, and one test runner style covers everything.
+- **The site's JSON API, not scraping its pages:** the same endpoints the site's Angular app uses (see [`docs/site-research.md`](docs/site-research.md)).
+- **One SQLite file and an in-memory index:** 30 Directives and 376 chunks need no database server and no vector database. Production moves to Postgres with pgvector ([HLD, Runtime](docs/production-hld.md#1-runtime)).
+- **LangChain models as the seam to the LLM** (ADR 0002): Gemini is one class, and the tests use LangChain's fake models, so no test needs a key. The Citations are checked by our code, so changing the vendor does not change how safe the answers are.
+
+How it would run in an organization is in the [production HLD](docs/production-hld.md) and its [diagram](docs/diagrams/production-architecture.png).
 
 ## Part B: POC
 
 ### Install and run
-You need Node.js 24 or newer (the store uses Node's built-in `node:sqlite`) and npm.
+You need Node.js 24 or newer (the store uses Node's built-in `node:sqlite`), npm and git. From a clean clone:
 
 ```bash
-npm install
+git clone https://github.com/sternyishai/takam-directives-poc.git
+cd takam-directives-poc
+npm ci                  # installs exactly what package-lock.json lists
+npm test                # every test; needs no network and no key
+```
+
+The committed store (`data/takam.db`) already holds the 30 Directives, so everything except the chatbot works with no configuration. To run the app:
+
+```bash
 cp .env.example .env    # then put your Gemini key in GOOGLE_API_KEY (search works without it)
 npm run dev             # the API on http://localhost:3000/api and the web app on http://localhost:4200
 ```
@@ -229,5 +288,54 @@ Run the same commands locally before pushing.
 Prettier checks code and config only. The Markdown docs are hand-written and kept as written (`.prettierignore`).
 
 ## Part C: Engineering thinking and production readiness
-1. Engineering decisions and quality: _TBD_
-2. Deployment and operations: _TBD_
+
+### 1. Engineering decisions and quality
+
+**The main design considerations:**
+- **Never trust the input.** The files come from an outside site, and the viewer puts their HTML into the page. So every file goes through a gate (size, zip magic bytes, structure, a zip-bomb check that counts the real expanded bytes), and the HTML is sanitized with an allowlist twice: by ingest, and by the API before it sends it. The API also sends a strict CSP header.
+- **Compute the truth instead of copying the site's flags.** In force comes from the validity dates, on the day of the request, because the site's `isvalid` flag is inverted (ADR 0001).
+- **A bad run must never replace a good store.** Ingest builds a new store beside the old one and swaps it in only if at most 20% of the files were rejected and at most 20% of the enrichments failed.
+- **The LLM helps, but our code checks it.** The enrichment must match a zod schema (and be in Hebrew), and every chat Citation must point to a passage that was given. If the LLM is down or there is no key, search and the viewer still work.
+- **Hebrew first.** Search normalizes Hebrew the way people really type it, matches whole words only (which is what fixes the "רכב" trap), and its rules were tuned on the real data, not on guesses (see "Decisions made while building").
+- **Testable without the outside world.** The site, the chat model and the embedding model are each passed in as parameters, so the tests swap in fakes. No test needs the network or a key, and the API tests start the whole Nest app over real HTTP.
+- **Simple enough to explain.** One SQLite file, MiniSearch in memory, cosine similarity as a short TypeScript function, and no framework where a function will do. Each choice is recorded with its reason in this README or in an ADR.
+
+**What I chose not to build**, and why:
+- **Links to a section, and comparing Editions:** worth having, but the find/read/trust problem comes first.
+- **Streaming and chat history:** one question and one checked answer is enough to show the value. With history, the checks get harder.
+- **Attachments, forms and tenders:** they are not Directives, and some are not Word files.
+- **Fixing the site's own tree and mobile layout:** that is a redesign of the site, not this tool.
+- **A virus scan and a vector database:** production needs the scan, and it is in the HLD. 376 chunks don't need a vector database.
+- **Full accessibility for the dropdown,** and **the other chapters.** The POC covers 30 Directives, and the HLD explains how to cover all of them.
+
+**One significant change that would improve maintainability and scalability:** move the store from one SQLite file to **Postgres with pgvector, with incremental ingest keyed by Edition number.**
+- Today every run re-downloads and re-enriches every Directive. That costs one LLM call per Directive per night, and it rewrites enrichment that was fine (issue #11 had to keep the old store for that reason).
+- Today the store is one file, so only one API process can serve it, and the index is rebuilt only on a restart.
+- With a schema per ingest run and an `active_run` pointer, a run writes beside the live data and is switched in by one transaction. Rollback is one `UPDATE`. Only new Editions are processed, several API pods share one database, and vector search moves into the database.
+- The details are in [HLD § 1 Runtime](docs/production-hld.md#1-runtime) and [§ 7 Scale](docs/production-hld.md#7-scale).
+
+### 2. Deployment and operations
+
+**Automated deployment in an organization** ([HLD § 1](docs/production-hld.md#1-runtime) and [§ 3](docs/production-hld.md#3-cicd)):
+- Three images from this repo: web (nginx with the static build), api (a Deployment), and ingest (a nightly CronJob). They run on the organization's OpenShift or Kubernetes, with managed Postgres + pgvector and an object store for the raw files.
+- Every pull request runs `nx affected -t lint typecheck test build`. A merge builds and scans the images that changed, and GitOps (Argo CD) deploys to staging and then to production.
+- SSO sits in front of the app, the secrets come from Vault, a ClamAV scan is added to the gate, and network egress is limited to the Takam site and the LLM endpoint ([HLD § 2](docs/production-hld.md#2-security)).
+
+**How to verify that a deployment succeeded** ([HLD § 4](docs/production-hld.md#4-how-to-verify-a-deployment)):
+1. The readiness probe: a new `/api/ready` endpoint answers 200 only when the store has Directives and the index holds all of them (`directives > 0` and `indexSize == directives`, the numbers `/api/health` already reports). The rollout waits for that.
+2. A smoke query: `13.10.1` returns `H.13.10.1` first, a Directive page comes with HTML and the CSP header, and one fixed chat question returns `found: true` with a Citation.
+3. `lastIngest` is less than 36 hours old.
+
+If any check fails, the deploy is rolled back.
+
+**One significant failure scenario** ([HLD § 6](docs/production-hld.md#6-the-failure-scenario-and-how-to-roll-back)): the site's firewall (Sucuri) starts answering every download with its HTML challenge page, with status 200.
+- **What happens:** the gate rejects every file with "an HTML page, not a Word file". More than 20% are rejected, so ingest discards the new store and exits with code 1. **The old store stays live**, and users notice nothing.
+- **How it is detected:** the ingest rejection-rate alert fires with one reason on every file, the CronJob's failed-Job alert fires, and later the freshness alert on `lastIngest` fires too.
+- **How it is diagnosed:** the logs give one reason per Document code. When every reason is the same, the cause is upstream. A single `curl` from a debug pod shows the challenge page. The fix (allow the egress IP, or change the User-Agent or the request rate) is followed by a manual run of the Job.
+
+This path is tested now: a test in `apps/ingest/src/ingest.spec.ts` serves the HTML page in place of 2 of 5 Word files (40% rejected) and checks that the old store is kept.
+
+The [HLD](docs/production-hld.md) also covers observability (the ingest rejection rate, the rate of searches with 0 results, chat errors, LLM latency and cost), rollback of bad data or a bad deploy, and scaling to all chapters.
+
+## Video
+A video of up to 3 minutes showing the POC: _the link will be added here._
