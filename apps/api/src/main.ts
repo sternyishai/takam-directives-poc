@@ -12,7 +12,7 @@ if (existsSync('.env')) process.loadEnvFile('.env');
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   configureApp(app); // the /api prefix and the security header
-  const port = process.env.PORT || 3000;
+  const port = process.env.PORT || 3456;
   await app.listen(port);
 
   // `nx serve api` waits for this signal to know the server is up. The variable

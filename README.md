@@ -17,7 +17,7 @@ You need Node.js 24 or newer (the store uses Node's built-in `node:sqlite`) and 
 ```bash
 npm install
 cp .env.example .env    # then put your Gemini key in GOOGLE_API_KEY (search works without it)
-npm run dev             # the API on http://localhost:3000/api and the web app on http://localhost:4200
+npm run dev             # the API on http://localhost:3456/api and the web app on http://localhost:4200
 ```
 
 Open http://localhost:4200. The page shows how many directives are in the store.
@@ -25,8 +25,8 @@ With an empty store it says "במאגר 0 הוראות". You can also run one si
 
 | Command | What it does |
 |---|---|
-| `npm run web` | the web app (Vite dev server, port 4200; `/api` is proxied to port 3000) |
-| `npm run api` | the NestJS API (port 3000, or `PORT`) |
+| `npm run web` | the web app (Vite dev server, port 4200; `/api` is proxied to port 3456) |
+| `npm run api` | the NestJS API (port 3456, or `PORT`) |
 | `npm run ingest` | downloads, checks, converts, chunks and enriches the 30 Directives in `apps/ingest/ingest.config.json` into a new store (needs `GOOGLE_API_KEY`) |
 | `npm run export` | writes each Directive in the store, enrichment included, to `data/export/<code>.json`, to read without SQLite |
 | `npm run lint` | ESLint on every project |
@@ -35,9 +35,9 @@ With an empty store it says "במאגר 0 הוראות". You can also run one si
 | `npm test` | every test project (Vitest for the libs, web and ingest; Jest for the API) |
 | `npm run build` | builds every project |
 
-`curl http://localhost:3000/api/health` returns `{"directives":30,"indexSize":30,"lastIngest":"…"}` against the committed store.
+`curl http://localhost:3456/api/health` returns `{"directives":30,"indexSize":30,"lastIngest":"…"}` against the committed store.
 The API opens `data/takam.db` (set `DB_PATH` to use another file). If the file does not exist, the API creates it with an empty schema.
-If the API runs on another port (`PORT=3456 npm run api`), start the web app with `API_URL=http://localhost:3456 npm run web` so its `/api` proxy finds it.
+If the API runs on another port (`PORT=4000 npm run api`), start the web app with `API_URL=http://localhost:4000 npm run web` so its `/api` proxy finds it.
 
 ### Search
 ```bash
