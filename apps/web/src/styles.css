@@ -317,7 +317,21 @@ textarea:focus {
   font-weight: 600;
   text-decoration: none;
 }
-.result-title:hover {
+/*
+ * The whole row opens the Directive: the title's link is stretched over its
+ * row (an empty ::after placed against the <tr>). It stays one real link,
+ * so the keyboard and screen readers see it as before.
+ */
+.results-table tbody tr {
+  position: relative;
+  cursor: pointer;
+}
+.result-title::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+}
+.results-table tbody tr:hover .result-title {
   text-decoration: underline;
 }
 .result-snippet {
