@@ -367,4 +367,11 @@ This path is tested now: a test in `apps/ingest/src/ingest.spec.ts` serves the H
 The [HLD](docs/production-hld.md) also covers observability (the ingest rejection rate, the rate of searches with 0 results, chat errors, LLM latency and cost), rollback of bad data or a bad deploy, and scaling to all chapters.
 
 ## Video
-A video of up to 3 minutes showing the POC: _the link will be added here._
+Two short films, each under 3 minutes, with music and Hebrew subtitles. They are in [`docs/videos/`](docs/videos/), and the app plays both on its "סרטונים" (videos) page, http://localhost:4200/videos.
+
+| Film | Length | What it shows |
+|---|---|---|
+| [The problems we solved](docs/videos/01-find-read-ask.mp4) | 1:44 | Each problem on the Takam site today, then in the POC. **Read:** a Directive was a Word download; now it opens as a page with a summary. **Find:** "רכבב" and "גימלאות" found 0; now they find the car and pensions Directives. **Ask:** the chatbot answers "מה התעריף לקצובת הבראה?" with 511.6 ₪ and a Citation that opens the Directive on that line. |
+| [How it works](docs/videos/02-how-it-works.mp4) | 2:16 | The parts as one machine, in the diagrams' colours, then a search word, a chat question and an ingested file travelling through them step by step: the Hebrew normalizer, MiniSearch, In force, the search log; embed, keyword plus vector retrieval, Gemini, the Citation check with its retry; the security gate, Mammoth, Enrichment, Chunks and the atomic swap. |
+
+The data in the films is real: the app's own labels, and the search and chat answers the running API gave on 2026-11-24. The site "today" is drawn as a plain sketch, not a screen recording. Both films were drawn in code with the anidoodle skill, in a separate project that is not part of this repo; only the rendered MP4s are committed.

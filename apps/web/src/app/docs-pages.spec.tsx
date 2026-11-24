@@ -67,6 +67,23 @@ describe('The navbar and the docs pages', () => {
     }
   });
 
+  it('shows the two films in order, under Hebrew titles', () => {
+    openAt('/videos');
+
+    const titles = Array.from(document.querySelectorAll('figcaption')).map(
+      (caption) => caption.textContent,
+    );
+    expect(titles).toEqual([
+      'הבעיות שפתרנו: קוראים, מוצאים, שואלים',
+      'איך זה עובד: הרכיבים וזרימת הנתונים',
+    ]);
+    const sources = Array.from(document.querySelectorAll('video')).map(
+      (player) => player.getAttribute('src'),
+    );
+    expect(sources[0]).toContain('01-find-read-ask');
+    expect(sources[1]).toContain('02-how-it-works');
+  });
+
   it('lists the Hebrew ADRs and opens one', () => {
     openAt('/adr');
 

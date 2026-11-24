@@ -81,10 +81,21 @@ export const diagrams: RepoFile[] = Object.entries(diagramUrls)
       diagramRank(a.name) - diagramRank(b.name) || a.name.localeCompare(b.name),
   );
 
+/**
+ * A Hebrew title for each video we know. The file names start with a
+ * number, so sorting by name already plays them in order. A video that is
+ * not listed here is still shown, under its file name.
+ */
+const VIDEO_TITLES: Record<string, string> = {
+  '01-find-read-ask': 'הבעיות שפתרנו: קוראים, מוצאים, שואלים', // "The problems we solved: read, find, ask"
+  '02-how-it-works': 'איך זה עובד: הרכיבים וזרימת הנתונים', // "How it works: the parts and the data flow"
+};
+
 export const videos: RepoFile[] = Object.entries(videoUrls)
   .map(([path, url]) => {
     const name = fileName(path);
-    return { name, title: withoutExtension(name), url };
+    const stem = withoutExtension(name);
+    return { name, title: VIDEO_TITLES[stem] ?? stem, url };
   })
   .sort((a, b) => a.name.localeCompare(b.name));
 
