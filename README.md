@@ -16,8 +16,8 @@ Each point below was checked on the live site on 2026-11-23 (all of the evidence
 
 | | What happens on the site today | Evidence |
 |---|---|---|
-| Find | Search covers only the metadata (title, code, keywords), never the text. | Headings inside Directive 1.1.1, such as "תקציב גמיש" (flexible budget), return 0 results. |
-| Find | Search matches parts of words, with no ranking. | "רכב" (car) returns 62 results, and the first is 1.1.1, a budget glossary, because its keywords contain "הרכב התקציב" (the *composition* of the budget). The results are a chapter tree, not a ranked list. |
+| Find | Search covers only the metadata (title, code, keywords), never the text. | Headings inside Directive H.1.1.1, such as "תקציב גמיש" (flexible budget), return 0 results. |
+| Find | Search matches parts of words, with no ranking. | "רכב" (car) returns 62 results, and the first is H.1.1.1, a budget glossary, because its keywords contain "הרכב התקציב" (the *composition* of the budget). The results are a chapter tree, not a ranked list. |
 | Find | There is no tolerance for typos or Hebrew spelling variants. | "גמלאות" (pensions) finds 8, while "גימלאות", the same word in full spelling, finds 0. "רכבב" (one extra letter) finds 0. |
 | Find | The metadata is thin, so better matching on it alone can't fix search. | 696 of 1,127 Documents have no keywords, and in 260 of 418 Instructions the description is just the code. |
 | Read | Reading a Directive means downloading a `.docx`. | Nothing is shown in the browser. That is awkward on a phone, and a section can't be linked to. |
@@ -322,7 +322,7 @@ Prettier checks code and config only. The Markdown docs are hand-written and kep
 - SSO sits in front of the app, the secrets come from Vault, a ClamAV scan is added to the gate, and network egress is limited to the Takam site and the LLM endpoint ([HLD § 2](docs/production-hld.md#2-security)).
 
 **How to verify that a deployment succeeded** ([HLD § 4](docs/production-hld.md#4-how-to-verify-a-deployment)):
-1. The readiness probe: `/api/health` answers 200 with `directives > 0` and `indexSize == directives`. The rollout waits for that.
+1. The readiness probe: a new `/api/ready` endpoint answers 200 only when the store has Directives and the index holds all of them (`directives > 0` and `indexSize == directives`, the numbers `/api/health` already reports). The rollout waits for that.
 2. A smoke query: `13.10.1` returns `H.13.10.1` first, a Directive page comes with HTML and the CSP header, and one fixed chat question returns `found: true` with a Citation.
 3. `lastIngest` is less than 36 hours old.
 

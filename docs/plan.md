@@ -109,7 +109,7 @@ data/takam.db   the only store (committed); data/raw/ is gitignored and never se
 | 3 | Production HLD | `docs/production-hld.md` |
 | 4 | Diagram: POC architecture (UI / API / data / ingest, and the components in each) | `docs/diagrams/poc-architecture.png` |
 | 5 | Diagram: production architecture (the HLD's target state) | `docs/diagrams/production-architecture.png` |
-| 6 | Diagram: ingest pipeline (fetch → gate → convert → chunk → enrich → embed → SQLite, and the points where a file is rejected) | `docs/diagrams/ingest-pipeline.png` |
+| 6 | Diagram: ingest pipeline (fetch → gate → convert → enrich → chunk → embed → SQLite, and the points where a file is rejected) | `docs/diagrams/ingest-pipeline.png` |
 | 7 | Diagram: the chat flow as a LangGraph (retrieve → generate → checkCitations, with the retry and fallback) | `docs/diagrams/chat-flow.png` |
 | 8 | Decision records in English, plus Hebrew versions | `docs/adr/`, `docs/adr/he/` |
 | 9 | Video, up to 3 minutes | link in the README |

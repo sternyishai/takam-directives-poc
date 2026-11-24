@@ -26,7 +26,7 @@ The organization's container platform (OpenShift or another Kubernetes) runs thr
 
 - **Sign-in:** SSO in front of both the web app and the API, through the organization's identity provider (OIDC at the Route/Ingress, or an oauth2-proxy sidecar). The Directives are public, but chat costs money per question, and the search log should be tied to real users.
 - **Secrets from a vault:** the LLM key and the database password come from Vault (or the organization's secret manager) into the pods as environment variables, through the External Secrets Operator or the Vault agent. Nothing secret is in the repo or the image. The POC already reads everything from the environment (`.env` is only for a laptop, and `.env.example` holds no values).
-- **A virus scan in the gate:** the gate gets one more check, after the zip checks and before Mammoth opens the file: send the file to a ClamAV service (`clamd`) and reject it if it finds anything. That reject counts toward the 20% rule like any other. The POC has no scan (README, "Not done").
+- **A virus scan in the gate:** the gate gets one more check, after the zip checks and before Mammoth opens the file: send the file to a ClamAV service (`clamd`) and reject it if it finds anything. That reject counts toward the 20% rule like any other. The POC has no scan (README, Part C, "What I chose not to build").
 - **Network egress limited:** a NetworkPolicy, plus the organization's egress firewall or proxy, lets the pods reach only two outside hosts: `takam.mof.gov.il` (ingest) and the LLM endpoint (ingest and API). Everything else is refused, so a converted file that somehow ran code could not send data out.
 - **What the POC already does, and production keeps:** the gate's limits (2 MB, the `PK` magic bytes, `word/document.xml`, under 200 entries, under 20 MB expanded, counted as a stream), sanitize-html with an allowlist in ingest and again in the API, the API's strict CSP header, and citations checked in our code rather than by the model.
 - **Images:** containers run as non-root with a read-only root filesystem, and the registry scans each image before deploy.
@@ -46,7 +46,7 @@ Migrations (the Postgres schema) run as a Job before the API's new pods start, a
 
 The deploy counts as done only when all three pass. The pipeline runs them, and a person can run them by hand with the same commands.
 
-1. **Readiness probe:** each API pod is Ready only when `GET /api/health` answers 200. The rollout waits for all new pods to be Ready and stops (keeping the old pods) if they don't get there in time. `/api/health` returns `{directives, indexSize, lastIngest}`. Readiness also requires `directives > 0` and `indexSize == directives`, so a pod that started against an empty or half-built store never gets traffic.
+1. **Readiness probe:** each API pod is Ready only when its readiness endpoint answers 200. The rollout waits for all new pods to be Ready and stops (keeping the old pods) if they don't get there in time. In the POC, `GET /api/health` returns `{directives, indexSize, lastIngest}` and always answers 200, even for an empty store. Production adds `GET /api/ready`, which answers 503 unless `directives > 0` and `indexSize == directives`, so a pod that started against an empty or half-built store never gets traffic. `/api/health` stays as it is, for people and dashboards.
 2. **Smoke query:** the pipeline calls the live URL:
    - `GET /api/search?q=13.10.1` must return `H.13.10.1` first. That checks the database, the index and the Hebrew-aware tokenizer in one call.
    - `GET /api/directives/H.13.10.1` must return HTML and the CSP header.
@@ -73,7 +73,7 @@ The API and ingest export Prometheus metrics, and logs go to the cluster's log s
 **The scenario.** The Takam site sits behind a web firewall (Sucuri). When the firewall decides a client is a bot, it answers every download with an HTML challenge page and status 200, not with the Word file. The POC met this while it was being built: Node's default User-Agent got 403s, and a download URL with an empty last segment got the HTML page.
 
 **What happens in this design:**
-1. Ingest downloads 30 (or 500) "files" that are all the same HTML page.
+1. Ingest downloads 30 (or, in production, about 550) "files" that are all the same HTML page.
 2. The gate rejects each one with the reason "an HTML page, not a Word file", because its first bytes are `<!DOCTYPE` and not the zip magic bytes `PK`. The gate gives the HTML page its own reason, apart from any other file that is not a zip.
 3. 100% of the files are rejected, more than 20%, so ingest drops its new schema (in the POC, it deletes `takam.db.tmp`) and exits with code 1. **The old store stays live**, so employees still search and read yesterday's Directives, with no gap.
 4. **An alert fires** in two ways: the rejection-rate alert (with the same `reason="html_page"` label on every file), and the CronJob's failed-Job alert. The next morning, the 36-hour freshness alert fires too if nothing is done.
@@ -83,7 +83,7 @@ The API and ingest export Prometheus metrics, and logs go to the cluster's log s
 **How to roll back:**
 - **Bad data** (a run passed the 20% rules but the content is wrong, for example enrichment in the wrong language): point `active_run` back at the previous schema, in one `UPDATE`, and the API's next refresh serves it. Schemas are kept for 7 days.
 - **A bad deploy:** revert the image tag in the deploy repo, and Argo CD rolls the Deployment back (or run `oc rollout undo deployment/api`). Migrations are backward-compatible, so the old API runs on the new schema.
-- **A bad model** (the LLM provider changed the model behind a name): pin the model version in the config (`LLM_MODEL`, `EMBEDDING_MODEL`) in Vault, and restart. The embedding model must match the stored vectors. The API refuses vectors of a different length, and a model change needs a full re-embed (one ingest run).
+- **A bad model** (the LLM provider changed the model behind a name): pin the model version in the config (`LLM_MODEL`, `EMBEDDING_MODEL`) in Vault, and restart. The embedding model must match the stored vectors, so a change of embedding model needs a full re-embed (one ingest run). The POC only fails a question whose vector length differs from the stored ones (the cosine function throws). Production should check the model name and vector length at startup and refuse to start on a mismatch.
 
 ## 7. Scale
 
