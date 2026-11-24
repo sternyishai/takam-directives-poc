@@ -23,6 +23,15 @@ Then open **http://localhost:4200**.
 
 The database is already in the repo (`data/takam.db`, a SQLite file). It holds the 30 Directives, their summaries, the chat passages and their embeddings. So search and the Directive viewer work right away, with no key and no ingest run.
 
+## How it fits together
+`npm run dev` starts two processes:
+- **The web app** (React, port 4200): the search page, the Directive viewer and the chat window. It sends every `/api/...` request to the API.
+- **The API** (NestJS, port 3456): when it starts, it reads `data/takam.db` and builds the search index in memory. It answers search, viewer and chat requests. Only chat calls out to Gemini.
+
+![POC architecture](docs/diagrams/poc-architecture.png)
+
+More diagrams are in [docs/diagrams/](docs/diagrams/), for example the [chat flow](docs/diagrams/chat-flow.png).
+
 ## 3. Turn on the chatbot (optional)
 The chatbot needs a Gemini API key. If you were sent one:
 ```bash
