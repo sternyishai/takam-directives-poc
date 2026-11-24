@@ -6,7 +6,7 @@ A take-home assignment built on the Takam Directives website, https://takam.mof.
 - **Part B:** how to install, run and test the POC from a clean clone, and the decisions made while building it.
 - **Part C:** short answers, with links to the production design in [`docs/production-hld.md`](docs/production-hld.md).
 
-Terms such as Directive, Edition, In force and Citation are defined in [`GLOSSARY.md`](GLOSSARY.md). The decisions with real trade-offs are in [`docs/adr/`](docs/adr/).
+Terms such as Directive, Edition, In force and Citation are defined in [`GLOSSARY.md`](GLOSSARY.md). The decisions with real trade-offs are in [`docs/adr/`](docs/adr/), and in Hebrew, with the same numbers, in [`docs/adr/he/`](docs/adr/he/).
 
 ## Part A: Problem and solution
 
