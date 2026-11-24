@@ -23,6 +23,15 @@ Then open **http://localhost:4200**.
 
 The database is already in the repo (`data/takam.db`, a SQLite file). It holds the 30 Directives, their summaries, the chat passages and their embeddings. So search and the Directive viewer work right away, with no key and no ingest run.
 
+## See the diagrams and videos of the prototype
+With `npm run dev` running, the navbar at the top of every page has four pages:
+- **האפליקציה** (http://localhost:4200/): the app itself: search, the Directive viewer and the chatbot.
+- **תרשימים** (http://localhost:4200/diagrams): the diagrams: the POC architecture, the search, chat and ingest flows, and the production architecture.
+- **סרטונים** (http://localhost:4200/videos): two short videos of the prototype: finding, reading and asking about a Directive, and how it works inside.
+- **החלטות (ADR)** (http://localhost:4200/adr): the design decisions, in Hebrew.
+
+Without running anything, the same files are in the repo: the diagrams in [docs/diagrams/](docs/diagrams/) (`.png`) and the videos in [docs/videos/](docs/videos/) (`.mp4`). To add a video, put its `.mp4` file in `docs/videos/`.
+
 ## How it fits together
 `npm run dev` starts two processes:
 - **The web app** (React, port 4200): the search page, the Directive viewer and the chat window. It sends every `/api/...` request to the API.
@@ -32,7 +41,6 @@ The database is already in the repo (`data/takam.db`, a SQLite file). It holds t
 
 More diagrams are in [docs/diagrams/](docs/diagrams/), for example the [chat flow](docs/diagrams/chat-flow.png).
 
-The navbar at the top has four pages: **האפליקציה** (the app: search, the viewer and the chatbot), **תרשימים** (the diagrams), **סרטונים** (the videos) and **החלטות (ADR)** (the decisions, in Hebrew). To add a video, put the `.mp4` file in `docs/videos/`.
 
 ## 3. Turn on the chatbot (optional)
 The chatbot needs a Gemini API key. If you were sent one:
