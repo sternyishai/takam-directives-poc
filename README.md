@@ -68,6 +68,7 @@ How it would run in an organization is in the [production HLD](docs/production-h
 ## Part B: POC
 
 ### Install and run
+A short quick start for another machine is in [HOW-TO-RUN.md](HOW-TO-RUN.md).
 You need Node.js 24 or newer (the store uses Node's built-in `node:sqlite`), npm and git. From a clean clone:
 
 ```bash
