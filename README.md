@@ -367,7 +367,9 @@ This path is tested now: a test in `apps/ingest/src/ingest.spec.ts` serves the H
 The [HLD](docs/production-hld.md) also covers observability (the ingest rejection rate, the rate of searches with 0 results, chat errors, LLM latency and cost), rollback of bad data or a bad deploy, and scaling to all chapters.
 
 ## Video
-Two short films, each under 3 minutes, with music and Hebrew subtitles. They are in [`docs/videos/`](docs/videos/), and the app plays both on its "סרטונים" (videos) page, http://localhost:4200/videos.
+Two short films, each under 3 minutes, with music and Hebrew subtitles. They are in [`docs/videos/`](docs/videos/), and the app plays both on its "סרטונים" (videos) page, http://localhost:4200/videos, or online at https://sternyishai.github.io/takam-directives-poc/videos.
+
+The online copy is the same web app, built by [`.github/workflows/pages.yml`](.github/workflows/pages.yml) on each push to `main` and served by GitHub Pages. Pages serves only static files, so the API is not there: the diagrams, videos and ADRs work, but search, the viewer and the chatbot answer "unavailable". Two small changes make the app work under the repo's path, `/takam-directives-poc/`: Vite's `base` comes from a `BASE_PATH` variable (unset locally, so it stays `/`), and the router gets the same path as its `basename`. Pages cannot send every URL to `index.html`, so the workflow copies `index.html` to `404.html`, and a direct link such as `/takam-directives-poc/diagrams` still opens the right page.
 
 | Film | Length | What it shows |
 |---|---|---|

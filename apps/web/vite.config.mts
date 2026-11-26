@@ -5,6 +5,10 @@ import { nxReadySignal } from '@nx/vite/plugins/nx-ready-signal.plugin';
 
 export default defineConfig(() => ({
   root: import.meta.dirname,
+  // The path the site is served under. Locally it is the root, "/". The
+  // GitHub Pages build (.github/workflows/pages.yml) sets BASE_PATH to
+  // "/takam-directives-poc/", because Pages serves the repo there.
+  base: process.env.BASE_PATH ?? '/',
   cacheDir: '../../node_modules/.vite/apps/web',
   server: {
     port: 4200,

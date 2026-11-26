@@ -1,0 +1,58 @@
+# Publishes the web app to GitHub Pages on each push to main:
+# https://sternyishai.github.io/takam-directives-poc/
+#
+# Pages serves static files only, so the API is not there: search, the
+# Directive viewer and the chatbot answer "unavailable". What does work is
+# what the web app builds in: the diagrams, the videos and the Hebrew ADRs.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # also lets you run it by hand from the Actions tab
+
+permissions:
+  contents: read
+  pages: write # to publish to Pages
+  id-token: write # Pages checks that the files come from this workflow
+
+# Only one deploy at a time; a newer push waits for the running one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Pages serves the repo under /takam-directives-poc/, not at the root.
+      - name: Build the web app
+        run: npx nx build web
+        env:
+          BASE_PATH: /takam-directives-poc/
+
+      # Pages has no "send every URL to index.html" setting, so opening
+      # /takam-directives-poc/diagrams directly would be a 404. Pages shows
+      # 404.html for any missing file, so a copy of index.html there lets
+      # the React router show the right page.
+      - name: Let deep links work
+        run: cp apps/web/dist/index.html apps/web/dist/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
