@@ -30,7 +30,9 @@ With `npm run dev` running, the navbar at the top of every page has four pages:
 - **סרטונים** (http://localhost:4200/videos): two short videos of the prototype: finding, reading and asking about a Directive, and how it works inside.
 - **החלטות (ADR)** (http://localhost:4200/adr): the design decisions, in Hebrew.
 
-Without running anything, the same files are in the repo: the diagrams in [docs/diagrams/](docs/diagrams/) (`.png`) and the videos in [docs/videos/](docs/videos/) (`.mp4`). To add a video, put its `.mp4` file in `docs/videos/`.
+Without running anything, the same pages are online on GitHub Pages: **https://sternyishai.github.io/takam-directives-poc/**. There is no API there (Pages serves only static files), so the home page says "השרת אינו זמין" (the server is unavailable), and search, the viewer and the chatbot do not work. The diagrams, videos and ADR pages work in full. Each push to `main` publishes it again (`.github/workflows/pages.yml`).
+
+The same files are also in the repo: the diagrams in [docs/diagrams/](docs/diagrams/) (`.png`) and the videos in [docs/videos/](docs/videos/) (`.mp4`). To add a video, put its `.mp4` file in `docs/videos/`.
 
 ## How it fits together
 `npm run dev` starts two processes:

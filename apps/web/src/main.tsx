@@ -9,7 +9,9 @@ const root = ReactDOM.createRoot(
 
 root.render(
   <StrictMode>
-    <BrowserRouter>
+    {/* basename: the routes start after the base path, "/" locally and
+        "/takam-directives-poc/" on GitHub Pages (see vite.config.mts). */}
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <App />
     </BrowserRouter>
   </StrictMode>,
